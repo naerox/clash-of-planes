@@ -101,7 +101,6 @@ Baseline показує то 59, то 60 steps/s: вікно вимірюван�
 
 <img width="930" height="579" alt="Screenshot 2026-09-21 at 12 18 56 PM" src="https://github.com/user-attachments/assets/ebdc2697-7937-465b-bf76-77ac9a416a7d" />
 
-
 Після повернення з фонової вкладки (перший показ HUD після повернення):
 
 | Метрика       | rAF     | setInterval(16) |
@@ -141,7 +140,6 @@ Baseline показує то 59, то 60 steps/s: вікно вимірюван�
 
 <img width="1503" height="461" alt="Screenshot 2026-09-21 at 12 36 50 PM" src="https://github.com/user-attachments/assets/471e10d1-7328-4bc6-8239-348aa3656ff4" />
 <img width="1531" height="455" alt="Screenshot 2026-09-21 at 12 37 16 PM" src="https://github.com/user-attachments/assets/fd5dbfaa-a9ec-4759-981e-84d5038e1f22" />
-
 
 Кут після 5 с: variable — 2.0292 без throttling і 2.0303 з ним; fixed — 2.0292 в обох випадках.
 
