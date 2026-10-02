@@ -1,57 +1,78 @@
 import "./style.css";
 import { createLoop, rafSchedule } from "./loop.js";
 import { createInput, readControls } from "./input.js";
-import { createShip, integrate } from "./sim/ship.js";
 import { setupCanvas } from "./render/canvas.js";
-import { lerpShip } from "./render/interpolate.js";
-import { drawBackground, drawHud, drawShip } from "./render/draw.js";
-import { busyWait, createVariableLoop, getExperiment, intervalSchedule } from "./experiments.js";
+import {
+  drawAsteroids,
+  drawBackground,
+  drawBullets,
+  drawHud,
+  drawParticles,
+  drawPickups,
+  drawShip,
+  drawShipStatus,
+} from "./render/draw.js";
+import {
+  busyWait,
+  createVariableLoop,
+  getBugDemo,
+  getExperiment,
+  intervalSchedule,
+  runBugDemo,
+} from "./experiments.js";
+
+import { World } from "./sim/world.js";
+import { Ship } from "./sim/ship.js";
+import { Asteroid, ASTEROID_PARAMS } from "./sim/asteroid.js";
+import { Vector2 } from "./sim/vector.js";
+import { ARENA } from "./sim/arena.js";
+import { attachHoming } from "./sim/homing.js";
 
 const exp = getExperiment();
 const view = setupCanvas(document.querySelector("#game"));
 const input = createInput(window);
 
-// The simulation keeps two states: the previous step and the current one. The renderer blends them.
-let previous = createShip();
-let current = previous;
-let ticks = 0;
+const world = new World();
+const ship = world.spawn(new Ship(new Vector2(ARENA.width / 2, ARENA.height / 2)));
 
-// Scripted run (key T): fixed inputs for exactly 5 s of *simulated* time, so runs can be compared
-// across machines and CPU throttling (experiment 3).
-const RUN_SECONDS = 5;
-let run = null;
-let lastRun = null;
-
-function startRun() {
-  previous = current = createShip();
-  run = { time: 0 };
+// A small starter field: a few drifting asteroids, one of which hunts the ship (M4:
+// homing attached to an asteroid via composition, not a subclass).
+function spawnAsteroidField() {
+  for (let i = 0; i < 4; i++) {
+    const pos = world.randomSafeSpot(220);
+    const vel = Vector2.fromAngle(Math.random() * Math.PI * 2, 40 + Math.random() * 60);
+    world.spawn(new Asteroid(pos, vel, ASTEROID_PARAMS.maxRadius));
+  }
+  const hunter = world.spawn(
+    new Asteroid(world.randomSafeSpot(300), Vector2.zero, ASTEROID_PARAMS.minRadius),
+  );
+  attachHoming(hunter, ship);
 }
+spawnAsteroidField();
+world.spawnPickupAt(world.randomSafeSpot(260));
+
+// Lab 2's `this` demo runs once, on load, if the URL asks for it — see experiments.js.
+const bugMode = getBugDemo();
+if (bugMode) runBugDemo(bugMode, ship, world);
 
 function simulate(dt) {
   if (input.justPressed("KeyR")) {
-    previous = current = createShip();
-    run = null;
+    ship.respawnAt(world.randomSafeSpot());
   }
-  if (input.justPressed("KeyT")) startRun();
 
-  previous = current;
-  ticks++;
+  const controls = readControls(input);
+  world.step(dt, controls);
+  if (controls.fire) ship.fire(world); // called as `ship.fire(...)` — implicit binding, correct `this`
 
-  if (run) {
-    const stepDt = Math.min(dt, RUN_SECONDS - run.time); // land exactly on 5.000 s
-    current = integrate(current, { turn: run.time < 1 ? 1 : 0, thrust: true }, stepDt);
-    run.time += stepDt;
-    if (RUN_SECONDS - run.time < 1e-9) {
-      lastRun = { x: current.x, y: current.y, vx: current.vx, vy: current.vy };
-      console.log(`[${exp.name}] after ${RUN_SECONDS}s`, {
-        x: current.x.toFixed(4),
-        y: current.y.toFixed(4),
-        angle: current.angle.toFixed(4),
-      });
-      run = null;
-    }
-  } else {
-    current = integrate(current, readControls(input), dt);
+  // Keep a light asteroid field alive so M4's homing rock and pickups stay demonstrable.
+  if ([...world.ofKind("asteroid")].length < 3 && Math.random() < 0.01) {
+    world.spawn(
+      new Asteroid(
+        world.randomSafeSpot(220),
+        Vector2.fromAngle(Math.random() * Math.PI * 2, 40 + Math.random() * 60),
+        ASTEROID_PARAMS.maxRadius,
+      ),
+    );
   }
 
   input.endStep();
@@ -60,16 +81,16 @@ function simulate(dt) {
 let frameNo = 0;
 function render(alpha) {
   frameNo++;
-  if (exp.block && frameNo % 60 === 0) busyWait(100); // experiment 1
+  if (exp.block && frameNo % 60 === 0) busyWait(100); // Lab 1 experiment 1, unchanged
 
   drawBackground(view);
-  drawShip(view, lerpShip(previous, current, alpha));
-  drawHud(view, loop.stats, [
-    `mode      ${exp.name}`,
-    `tick      ${ticks}   alpha ${alpha.toFixed(2)}`,
-    ...(run ? [`run       ${run.time.toFixed(2)} / ${RUN_SECONDS} s`] : []),
-    ...(lastRun ? [`last run  x ${lastRun.x.toFixed(2)}  y ${lastRun.y.toFixed(2)}`] : []),
-  ]);
+  drawAsteroids(view, world, alpha);
+  drawPickups(view, world, alpha);
+  drawBullets(view, world, alpha);
+  drawParticles(view, world, alpha);
+  drawShip(view, ship, alpha);
+  drawHud(view, loop.stats, [`mode      ${exp.name}${bugMode ? `  bug:${bugMode}` : ""}`]);
+  drawShipStatus(view, ship);
 }
 
 const hooks = { simulate, render };

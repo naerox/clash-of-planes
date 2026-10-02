@@ -2,12 +2,12 @@
 
 export function createStats(windowMs = 1000) {
   const snapshot = {
-    stepsPerSec: 0, // simulation steps per second
-    framesPerSec: 0, // render frames per second
-    frameMs: 0, // how long the last frame's own work (simulate + render) took
-    deltaMs: 0, // time between the last two frames
-    jitterMs: 0, // standard deviation of deltaMs over the last window
-    maxDeltaMs: 0, // longest gap between frames in the last window
+    stepsPerSec: 0,
+    framesPerSec: 0,
+    frameMs: 0,
+    deltaMs: 0,
+    jitterMs: 0,
+    maxDeltaMs: 0,
   };
 
   let windowStart = null;
@@ -19,17 +19,15 @@ export function createStats(windowMs = 1000) {
 
   return {
     snapshot,
-
     countStep() {
       steps++;
     },
-
     countFrame(now, deltaMs, workMs) {
       snapshot.frameMs = workMs;
       snapshot.deltaMs = deltaMs;
 
       if (windowStart === null) {
-        windowStart = now; // first frame has no meaningful delta
+        windowStart = now;
         return;
       }
 

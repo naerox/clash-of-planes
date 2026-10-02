@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createAccumulator, createLoop, STEP } from "./loop.js";
 
-/** Drives an accumulator with a sequence of frame deltas; returns total steps. */
 function stepsFor(frameMs, totalMs) {
   const acc = createAccumulator();
   let steps = 0;
@@ -20,7 +19,7 @@ test("simulation runs at ~60 steps per second regardless of frame rate", () => {
 test("a huge frame delta is clamped: no spiral of death", () => {
   const acc = createAccumulator();
   const steps = acc.advance(5, () => {});
-  assert.equal(steps, Math.floor(0.25 / STEP)); // 15 steps, not 300
+  assert.equal(steps, Math.floor(0.25 / STEP));
 });
 
 test("alpha stays in [0, 1)", () => {
