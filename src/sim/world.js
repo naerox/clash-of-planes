@@ -5,7 +5,6 @@ import { applyHoming } from "./homing.js";
 import { makeExplosionParticles } from "./explosion.js";
 import { Pickup, PICKUP_KINDS, PICKUP_PARAMS } from "./pickup.js";
 import { ASTEROID_CONTACT_DAMAGE } from "./asteroid.js";
-import { EventBus, GAME_EVENTS } from "./events.js";
 
 /**
  * The entity store and the step function, in one place. `#entities` is a private
@@ -17,12 +16,6 @@ export class World {
   #entities = new Map();
   #toDespawn = new Set(); // deferred: step() marks ids here, sweeps them at the end
   #pickupTimer = PICKUP_PARAMS.respawnDelay;
-
-  /** `events` is injected (Lab 3): main.js passes the shared bus that audio and the HUD
-   * listen to; tests can pass their own or ignore it. */
-  constructor({ events = new EventBus() } = {}) {
-    this.events = events;
-  }
 
   spawn(entity) {
     this.#entities.set(entity.id, entity);
@@ -56,16 +49,8 @@ export class World {
     for (const e of this) if (e.kind === kind) yield e;
   }
 
-  spawnExplosion(pos, source) {
+  spawnExplosion(pos) {
     for (const p of makeExplosionParticles(pos)) this.spawn(p);
-    if (source) {
-      this.events.emit(GAME_EVENTS.EXPLODED, {
-        kind: source.kind,
-        id: source.id,
-        pos,
-        radius: source.radius,
-      });
-    }
   }
 
   spawnPickupAt(pos, type = Math.random() < 0.5 ? PICKUP_KINDS.SHIELD : PICKUP_KINDS.RAPID) {
@@ -146,27 +131,15 @@ function resolvePair(a, b, world) {
     const wasAlive = ship.hp > 0;
     ship.takeDamage(bullet.damage, world);
     bullet.alive = false;
-    world.events.emit(GAME_EVENTS.HIT, {
-      target: "ship",
-      targetId: ship.id,
-      pos: bullet.pos,
-      damage: bullet.damage,
-    });
     if (wasAlive && ship.hp === 0) bullet.owner.score++;
     return;
   }
   if (bullet && asteroid) {
     asteroid.hp -= bullet.damage;
     bullet.alive = false;
-    world.events.emit(GAME_EVENTS.HIT, {
-      target: "asteroid",
-      targetId: asteroid.id,
-      pos: bullet.pos,
-      damage: bullet.damage,
-    });
     if (asteroid.hp <= 0) {
       asteroid.alive = false;
-      world.spawnExplosion(asteroid.pos, asteroid);
+      world.spawnExplosion(asteroid.pos);
       bullet.owner.score++;
     }
     return;

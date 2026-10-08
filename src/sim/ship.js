@@ -2,7 +2,6 @@ import { Entity } from "./entity.js";
 import { Vector2 } from "./vector.js";
 import { wrapAngle } from "./math.js";
 import { Bullet } from "./bullet.js";
-import { GAME_EVENTS } from "./events.js";
 
 export const SHIP_PARAMS = Object.freeze({
   turnRate: 3.6, // rad/s at full turn input
@@ -91,10 +90,8 @@ export class Ship extends Entity {
     this.#cooldown = this.rapidTimer > 0 ? this.params.fireCooldown / 2 : this.params.fireCooldown;
     const nose = this.pos.add(Vector2.fromAngle(this.angle, this.radius));
     const muzzle = Vector2.fromAngle(this.angle, 480);
-    const bullet = world.spawn(new Bullet(nose, this.vel.add(muzzle), this));
-    // Lab 3: the sim only announces the shot; it has no idea a sound will play.
-    world.events.emit(GAME_EVENTS.FIRED, { shooterId: this.id, pos: nose, angle: this.angle });
-    return bullet;
+    const bullet = new Bullet(nose, this.vel.add(muzzle), this);
+    return world.spawn(bullet);
   }
 
   takeDamage(amount, world) {
@@ -106,7 +103,7 @@ export class Ship extends Entity {
   die(world) {
     this.#respawnTimer = this.params.respawnDelay;
     this.vel = Vector2.zero;
-    world.spawnExplosion(this.pos, this);
+    world.spawnExplosion(this.pos);
   }
 
   respawnAt(pos) {
