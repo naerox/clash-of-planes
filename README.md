@@ -199,6 +199,8 @@ ship.fire.call(buttonElement, clickEvent);
 // this === кнопка, а не undefined! Інша, але так само непрацююча помилка.
 ```
 
+<img width="1919" height="408" alt="image" src="https://github.com/user-attachments/assets/41180367-52ea-4384-9dbb-75a4c93027b1" />
+
 Це розходиться з найпростішим поясненням «this буде undefined»: специфікація DOM каже, що подієва система
 викликає слухача як `listener.call(currentTarget, event)` — тобто `this` стає елементом, на якому стався
 клік, а не `undefined`. `undefined` буває тільки тоді, коли викликати саму функцію-посилання без жодного
