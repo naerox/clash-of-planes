@@ -1,0 +1,32 @@
+{
+  "rooms": [
+    {
+      "id": "training",
+      "name": "Тренувальний полігон",
+      "players": 1,
+      "maxPlayers": 8,
+      "arena": { "asteroids": 3, "hunters": 0, "asteroidSpeed": [30, 60] }
+    },
+    {
+      "id": "belt",
+      "name": "Пояс астероїдів",
+      "players": 4,
+      "maxPlayers": 8,
+      "arena": { "asteroids": 8, "hunters": 1, "asteroidSpeed": [50, 120] }
+    },
+    {
+      "id": "hunters",
+      "name": "Мисливці",
+      "players": 2,
+      "maxPlayers": 6,
+      "arena": { "asteroids": 3, "hunters": 3, "asteroidSpeed": [40, 90] }
+    },
+    {
+      "id": "full",
+      "name": "Ангар (повна)",
+      "players": 4,
+      "maxPlayers": 4,
+      "arena": { "asteroids": 4, "hunters": 1, "asteroidSpeed": [40, 100] }
+    }
+  ]
+}
