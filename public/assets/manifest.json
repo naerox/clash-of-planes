@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "id": "config",
+      "type": "json",
+      "url": "config/game.json",
+      "size": 237
+    },
+    {
+      "id": "sheet",
+      "type": "image",
+      "url": "sprites/sheet.png",
+      "optional": true,
+      "size": 19034
+    },
+    {
+      "id": "atlas",
+      "type": "json",
+      "url": "sprites/sheet.json",
+      "optional": true,
+      "size": 1266
+    },
+    {
+      "id": "sfx.fire",
+      "type": "audio",
+      "url": "sfx/fire.wav",
+      "optional": true,
+      "size": 12392
+    },
+    {
+      "id": "sfx.hit",
+      "type": "audio",
+      "url": "sfx/hit.wav",
+      "optional": true,
+      "size": 10628
+    },
+    {
+      "id": "sfx.explode",
+      "type": "audio",
+      "url": "sfx/explode.wav",
+      "optional": true,
+      "size": 79424
+    }
+  ]
+}

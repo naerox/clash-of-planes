@@ -1,0 +1,4 @@
+{
+  "lobby": {
+    "url": "/api/rooms",
+    "pollMs": 3000,

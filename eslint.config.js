@@ -14,4 +14,9 @@ export default [
     files: ["src/**/*.test.js"],
     languageOptions: { globals: globals.node },
   },
+  {
+    // build scripts and the dev-server middleware run in Node
+    files: ["scripts/**/*.js", "server/**/*.js", "vite.config.js"],
+    languageOptions: { sourceType: "module", globals: globals.node },
+  },
 ];

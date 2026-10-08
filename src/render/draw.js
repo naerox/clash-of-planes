@@ -101,6 +101,11 @@ export function drawShip(view, ship, alpha) {
       const x = pos.x + dx;
       const y = pos.y + dy;
       if (x < -30 || x > ARENA.width + 30 || y < -30 || y > ARENA.height + 30) continue;
+      if (view.sprites) {
+        const frame = ship.thrusting ? `ship_thrust_${flicker > 0.75 ? 0 : 1}` : "ship";
+        view.sprites.draw(ctx, frame, x, y, { angle, radius: ship.radius });
+        continue;
+      }
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(angle);
@@ -117,6 +122,10 @@ export function drawBullets(view, world, alpha) {
   ctx.fillStyle = COLORS.bullet;
   for (const b of world.ofKind("bullet")) {
     const { pos } = interpolatedPose(b, alpha);
+    if (view.sprites) {
+      view.sprites.draw(ctx, "bullet", pos.x, pos.y, { radius: b.radius });
+      continue;
+    }
     ctx.beginPath();
     ctx.arc(pos.x, pos.y, b.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -128,6 +137,11 @@ export function drawAsteroids(view, world, alpha) {
   beginWorld(view);
   for (const a of world.ofKind("asteroid")) {
     const { pos, angle } = interpolatedPose(a, alpha);
+    if (view.sprites) {
+      const frame = a.homing ? "asteroid_hunter" : `asteroid_${a.id % 3}`;
+      view.sprites.draw(ctx, frame, pos.x, pos.y, { angle, radius: a.radius });
+      continue;
+    }
     ctx.save();
     ctx.translate(pos.x, pos.y);
     ctx.rotate(angle);
@@ -171,6 +185,10 @@ export function drawPickups(view, world, alpha) {
   const pulse = 1 + 0.15 * Math.sin(performance.now() / 200);
   for (const pk of world.ofKind("pickup")) {
     const { pos } = interpolatedPose(pk, alpha);
+    if (view.sprites) {
+      view.sprites.draw(ctx, `pickup_${pk.type}`, pos.x, pos.y, { radius: pk.radius * pulse });
+      continue;
+    }
     ctx.fillStyle = pk.type === "shield" ? COLORS.pickupShield : COLORS.pickupRapid;
     ctx.save();
     ctx.translate(pos.x, pos.y);
@@ -205,10 +223,26 @@ export function drawHud(view, stats, lines = []) {
   ctx.fillStyle = COLORS.hud;
   ctx.textBaseline = "bottom";
   ctx.fillText(
-    "←/→ або A/D — поворот   ↑ або W — тяга   Space — вогонь   R — скинути",
+    "←/→ або A/D — поворот   ↑ або W — тяга   Space — вогонь   R — скинути   M — звук",
     12,
     view.height - 10,
   );
+}
+
+/** Lab 3: the bus-driven event feed (hudFeed.js), fading out under the ship status. */
+export function drawEventFeed(view, entries) {
+  const { ctx } = view;
+  beginScreen(view);
+  ctx.font = '13px ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+  ctx.textBaseline = "top";
+  ctx.textAlign = "right";
+  entries.forEach((entry, i) => {
+    ctx.globalAlpha = entry.alpha;
+    ctx.fillStyle = entry.text.startsWith("exploded") ? COLORS.hudWarn : COLORS.hud;
+    ctx.fillText(entry.text, view.width - 16, 70 + i * 17);
+  });
+  ctx.globalAlpha = 1;
+  ctx.textAlign = "left";
 }
 
 /** Ship HP bar + score, drawn separately from the perf HUD so M3's "score on the HUD"
