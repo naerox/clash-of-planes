@@ -1,0 +1,18 @@
+{
+  "lobby": {
+    "url": "/api/rooms",
+    "pollMs": 3000,
+    "timeoutMs": 2500
+  },
+  "audio": {
+    "volume": 0.45
+  },
+  "defaultArena": {
+    "asteroids": 4,
+    "hunters": 1,
+    "asteroidSpeed": [
+      40,
+      100
+    ]
+  }
+}
