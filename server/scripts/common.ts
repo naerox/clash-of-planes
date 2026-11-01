@@ -32,7 +32,7 @@ export async function startServer(
   const base = await new Promise<string>((resolve) => {
     let buf = "";
     child.stdout?.on("data", (chunk: Buffer) => {
-      buf += chunk;
+      buf += chunk.toString();
       const m = buf.match(/"url":"(http:\/\/[^"]+)"/);
       if (m?.[1]) resolve(m[1]);
     });

@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import net from "node:net";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -12,7 +12,7 @@ function raw(port: number, target: string, extra = "") {
       socket.write(`GET ${target} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n${extra}\r\n`);
     });
     let data = "";
-    socket.on("data", (c) => (data += c));
+    socket.on("data", (c: Buffer) => (data += c.toString()));
     socket.on("end", () => resolve({ status: Number(data.slice(9, 12)), text: data }));
     socket.on("error", reject);
   });
@@ -219,7 +219,7 @@ test("a malformed request does not crash the server", async () => {
         socket.write("NOT HTTP AT ALL\r\n\r\n"),
       );
       let data = "";
-      socket.on("data", (c) => (data += c));
+      socket.on("data", (c: Buffer) => (data += c.toString()));
       socket.on("close", () => resolve(data));
     });
     assert.match(r, /^HTTP\/1\.1 400/);

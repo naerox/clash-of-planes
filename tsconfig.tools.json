@@ -1,0 +1,11 @@
+{
+  // The files that belong to no package: root configs, the cast counter, the Playwright suite.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+  },
+  "include": ["tools", "e2e", "*.config.ts"]
+}

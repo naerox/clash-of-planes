@@ -14,6 +14,7 @@ import {
   drawShipStatus,
 } from "./render/draw.ts";
 import { drawNetgraph } from "./render/netgraph.ts";
+import { SceneScratch } from "./game/scene.ts";
 import { ParticleSystem } from "./render/particles.ts";
 import {
   busyWait,
@@ -25,6 +26,8 @@ import {
 
 import { STEP, World, type JoinedMessage } from "@dogfight/shared";
 import { Bus, type GameEvents } from "./events.ts";
+import * as perf from "./perf.ts";
+import { SPAN, record } from "./perf.ts";
 import { GameSession, type SessionOptions } from "./game/session.ts";
 
 import { once } from "./async.ts";
@@ -87,7 +90,7 @@ async function loadGame(screen: LoadingScreen): Promise<LoadResult & { bootId: s
     const result = await loadAll(applyFaults(manifest, faults, { firstBoot, bootId }), {
       signal: ac.signal,
       baseUrl: ASSET_BASE,
-      onProgress: screen.update,
+      onProgress: (progress) => screen.update(progress),
       ...NET,
     });
     console.info(`[assets] loadAll: ${(performance.now() - t0).toFixed(0)} ms`, result.failures);
@@ -313,20 +316,24 @@ function startGame({ name, room, audio, connection, joined }: StartOptions): voi
   }
 
   function simulate(): void {
+    const t0 = performance.now();
     session.step(readControls(input)); // one fixed 30 Hz step: number it, predict it, send it
     input.endStep();
+    record(SPAN.simulate, t0);
   }
 
+  const sceneScratch = new SceneScratch();
   let frameNo = 0;
   let lastRender = performance.now();
   function render(alpha: number): void {
+    const renderStart = performance.now();
     frameNo++;
     if (exp.block && frameNo % 60 === 0) busyWait(100); // Lab 1 experiment 1, unchanged
 
     const now = performance.now();
     const frameMs = Math.min(100, now - lastRender);
     lastRender = now;
-    const scene = session.render(now, alpha, frameMs);
+    const scene = session.render(now, alpha, frameMs, sceneScratch);
     netHandle.lastScene = scene;
     particles.update(frameMs / 1000);
 
@@ -346,6 +353,7 @@ function startGame({ name, room, audio, connection, joined }: StartOptions): voi
     drawShipStatus(view, scene.me);
     drawEventFeed(view, hud.recent());
     if (showNetgraph) drawNetgraph(view, session);
+    record(SPAN.render, renderStart);
   }
 
   // The loop is Lab 1's: a fixed step with an accumulator and render interpolation. What is new
@@ -357,7 +365,13 @@ function startGame({ name, room, audio, connection, joined }: StartOptions): voi
     step: STEP,
     ...hooks,
     schedule: exp.interval ? intervalSchedule(16) : rafSchedule,
+    onFrame: (workMs, intervalMs) => {
+      perf.store(SPAN.frame, workMs);
+      perf.store(SPAN.interval, intervalMs);
+    },
   });
+  perf.enableUserTiming(query.has("trace"));
+  window.__perf = perf;
   loop.start();
 }
 
@@ -388,19 +402,22 @@ async function main(): Promise<void> {
   startGame({ ...session, audio });
 }
 
+/** The last line of defence: an error nobody handled is shown, not swallowed. */
+const showFatal = (err: unknown): void => {
+  console.error(err);
+  overlay.hidden = false;
+  overlay.textContent = `Неочікувана помилка: ${errorMessage(err)}`;
+};
+
 const params = query;
 if (params.has("puzzles")) {
-  import("./lab3/puzzles.ts").then((m) => m.showPuzzles(overlay));
+  import("./lab3/puzzles.ts").then((m) => m.showPuzzles(overlay)).catch(showFatal);
 } else if (params.has("determinism")) {
-  import("./lab5/determinism.ts").then((m) => m.showDeterminism(overlay));
+  import("./lab5/determinism.ts").then((m) => m.showDeterminism(overlay)).catch(showFatal);
 } else if (params.has("bench")) {
   const latency = params.has("latency") ? faults.latency : 150;
-  import("./lab3/bench.ts").then((m) => m.showBench(overlay, { latency }));
+  import("./lab3/bench.ts").then((m) => m.showBench(overlay, { latency })).catch(showFatal);
 } else {
-  main().catch((err: unknown) => {
-    // Every expected failure is handled above; this is the last line for real bugs.
-    console.error(err);
-    overlay.hidden = false;
-    overlay.textContent = `Неочікувана помилка: ${errorMessage(err)}`;
-  });
+  // Every expected failure is handled inside; this is the last line for real bugs.
+  main().catch(showFatal);
 }

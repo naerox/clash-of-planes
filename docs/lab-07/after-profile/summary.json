@@ -1,0 +1,241 @@
+{
+  "label": "after-profile",
+  "seconds": 30,
+  "bots": 8,
+  "chromium": "141.0.7390.37",
+  "frameCpuMs": {
+    "n": 1862,
+    "mean": 0.81,
+    "p50": 0.8,
+    "p95": 1.2,
+    "p99": 1.7,
+    "max": 4.7
+  },
+  "frameIntervalMs": {
+    "n": 1862,
+    "mean": 16.711,
+    "p50": 16.7,
+    "p95": 16.7,
+    "p99": 16.8,
+    "max": 50
+  },
+  "simulateMs": {
+    "n": 934,
+    "mean": 0.182,
+    "p50": 0.2,
+    "p95": 0.3,
+    "p99": 0.4,
+    "max": 3
+  },
+  "renderMs": {
+    "n": 1862,
+    "mean": 0.708,
+    "p50": 0.7,
+    "p95": 1,
+    "p99": 1.4,
+    "max": 4.5
+  },
+  "decodeMs": {
+    "n": 995,
+    "mean": 0.067,
+    "p50": 0.1,
+    "p95": 0.2,
+    "p99": 0.2,
+    "max": 1.2
+  },
+  "reconcileMs": {
+    "n": 933,
+    "mean": 0.028,
+    "p50": 0,
+    "p95": 0.1,
+    "p99": 0.2,
+    "max": 0.4
+  },
+  "gc": {
+    "minor": {
+      "count": 15,
+      "totalMs": 17.87,
+      "maxMs": 3.42,
+      "p99Ms": 3.42
+    },
+    "major": {
+      "count": 8,
+      "totalMs": 229.91,
+      "maxMs": 35.74,
+      "p99Ms": 35.74
+    }
+  },
+  "longTasksOver50ms": 0,
+  "heapMB": {
+    "samples": 119,
+    "min": 5.2,
+    "max": 7.9,
+    "series": [
+      7.39, 7.72, 6.56, 6.97, 7.27, 7.61, 7.93, 6.7, 5.24, 5.54, 5.79, 6.05, 6.29, 6.56, 5.35, 5.65,
+      5.88, 6.09, 6.29, 6.47, 6.62, 6.8, 6.97, 5.67, 5.84, 5.21, 5.41, 5.61, 5.83, 6.04, 5.51, 5.68,
+      5.88, 6.11, 5.57, 5.72, 5.84, 5.99, 6.13, 6.28, 5.69, 5.3, 5.43, 5.6, 5.76, 5.89, 6.05, 6.21,
+      5.63, 5.76, 5.94, 6.1, 6.22, 6.34, 5.74, 5.39, 5.53, 5.67, 5.78, 5.95, 6.14, 5.53, 5.63, 5.74,
+      5.84, 5.95, 6.06, 6.16, 6.29, 5.7, 5.84, 5.97, 5.39, 5.57, 5.75, 5.9, 6.04, 6.18, 5.57, 5.69,
+      5.83, 5.96, 6.08, 6.2, 6.3, 5.69, 5.81, 5.94, 6.07, 5.19, 5.32, 5.45, 5.6, 5.74, 5.89, 6.03,
+      5.44, 5.61, 5.77, 5.91, 6.05, 5.15, 5.29, 5.41, 5.53, 5.67, 5.81, 5.94, 6.07, 5.48, 5.62,
+      5.75, 5.88, 6.01, 5.23, 5.36, 5.48, 5.61, 5.74
+    ]
+  },
+  "server": null,
+  "snapshotsReceived": 1126,
+  "traceSeconds": 31.4,
+  "cpuTop": [
+    {
+      "fn": "(idle) :0",
+      "ms": 21043,
+      "pct": 67.3
+    },
+    {
+      "fn": "(program) :0",
+      "ms": 8118,
+      "pct": 26
+    },
+    {
+      "fn": "fillText :0",
+      "ms": 362,
+      "pct": 1.2
+    },
+    {
+      "fn": "(garbage collector) :0",
+      "ms": 285,
+      "pct": 0.9
+    },
+    {
+      "fn": "drawImage :0",
+      "ms": 109,
+      "pct": 0.3
+    },
+    {
+      "fn": "send :0",
+      "ms": 97,
+      "pct": 0.3
+    },
+    {
+      "fn": "drawShip index-Bjy8hFrg.js:7858",
+      "ms": 70,
+      "pct": 0.2
+    },
+    {
+      "fn": "drawBackground index-Bjy8hFrg.js:7806",
+      "ms": 60,
+      "pct": 0.2
+    },
+    {
+      "fn": "requestAnimationFrame :0",
+      "ms": 56,
+      "pct": 0.2
+    },
+    {
+      "fn": "save :0",
+      "ms": 54,
+      "pct": 0.2
+    },
+    {
+      "fn": "(anonymous) index-Bjy8hFrg.js:10640",
+      "ms": 50,
+      "pct": 0.2
+    },
+    {
+      "fn": "setTransform :0",
+      "ms": 49,
+      "pct": 0.2
+    },
+    {
+      "fn": "createBufferSource :0",
+      "ms": 45,
+      "pct": 0.1
+    },
+    {
+      "fn": "lineTo :0",
+      "ms": 35,
+      "pct": 0.1
+    },
+    {
+      "fn": "drawNetgraph index-Bjy8hFrg.js:8106",
+      "ms": 30,
+      "pct": 0.1
+    }
+  ],
+  "allocTop": [
+    {
+      "fn": "next :0",
+      "kb": 2330,
+      "pct": 11.2
+    },
+    {
+      "fn": "set :0",
+      "kb": 1291,
+      "pct": 6.2
+    },
+    {
+      "fn": "spark index-Bjy8hFrg.js:8054",
+      "kb": 1138,
+      "pct": 5.5
+    },
+    {
+      "fn": "drawParticles index-Bjy8hFrg.js:7939",
+      "kb": 1082,
+      "pct": 5.2
+    },
+    {
+      "fn": "#blendBullets index-Bjy8hFrg.js:8635",
+      "kb": 1015,
+      "pct": 4.9
+    },
+    {
+      "fn": "drawShip index-Bjy8hFrg.js:7858",
+      "kb": 862,
+      "pct": 4.1
+    },
+    {
+      "fn": "render index-Bjy8hFrg.js:11209",
+      "kb": 790,
+      "pct": 3.8
+    },
+    {
+      "fn": "decay index-Bjy8hFrg.js:8841",
+      "kb": 740,
+      "pct": 3.6
+    },
+    {
+      "fn": "#blendShips index-Bjy8hFrg.js:8614",
+      "kb": 710,
+      "pct": 3.4
+    },
+    {
+      "fn": "getFloat32 :0",
+      "kb": 697,
+      "pct": 3.4
+    },
+    {
+      "fn": "teleported index-Bjy8hFrg.js:8570",
+      "kb": 685,
+      "pct": 3.3
+    },
+    {
+      "fn": "report index-Bjy8hFrg.js:9079",
+      "kb": 599,
+      "pct": 2.9
+    },
+    {
+      "fn": "drawBullets index-Bjy8hFrg.js:7890",
+      "kb": 581,
+      "pct": 2.8
+    },
+    {
+      "fn": "hypot :0",
+      "kb": 457,
+      "pct": 2.2
+    },
+    {
+      "fn": "#blendAsteroids index-Bjy8hFrg.js:8655",
+      "kb": 417,
+      "pct": 2
+    }
+  ]
+}

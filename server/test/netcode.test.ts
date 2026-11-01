@@ -1,7 +1,7 @@
 // Prediction, reconciliation and interpolation measured end to end: the real Match, the real
 // client GameSession, a virtual network. See harness.js.
 
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { ARENA, Asteroid, Vector2, entityId, wrappedDelta } from "@dogfight/shared";
 import { joinedMsg } from "../../client/src/testing.ts";

@@ -130,7 +130,7 @@ export function createSimulation({
 }: SimulationConfig = {}) {
   const clock: Clock = { t: 0 };
   const rng = new Rng(linkSeed);
-  const rooms = new RoomManager({ idleMs: 1e12, maxPlayersPerRoom: 8 });
+  const rooms = new RoomManager({ idleMs: 2 ** 31 - 1, maxPlayersPerRoom: 8 });
   const room = rooms.create({ name: "sim", arena });
   const inertSchedule: Schedule = () => () => {};
   const match = new Match({

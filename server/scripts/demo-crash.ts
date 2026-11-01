@@ -28,11 +28,13 @@ if (mode === "bare") {
   // LOG_DIR does not exist; nothing listens for the stream's "error" event
   setTimeout(() => createWriteStream("/no/such/dir/match.ndjson"), 300);
 } else if (mode === "rejection") {
+  // the unhandled rejection IS the demo
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises
   setTimeout(() => Promise.reject(new Error("a rejected promise nobody awaited")), 300);
 } else if (mode === "fixed") {
   setTimeout(() => {
     const emitter = new EventEmitter();
-    emitter.on("error", (err) => console.log(`  handled emitter error: ${err.message}`));
+    emitter.on("error", (err: Error) => console.log(`  handled emitter error: ${err.message}`));
     emitter.emit("error", new Error("boom"));
 
     createWriteStream("/no/such/dir/match.ndjson").on("error", (err) =>

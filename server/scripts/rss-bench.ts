@@ -81,7 +81,7 @@ async function run(label: string, url: string) {
     req.on("error", reject);
   });
   res.on("error", () => {});
-  res.on("data", (chunk) => {
+  res.on("data", (chunk: Buffer) => {
     received += chunk.length;
     budget -= chunk.length;
     if (budget <= 0) res.pause();

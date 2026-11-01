@@ -175,7 +175,8 @@ export const fetchJson: FetchJson = async (url, opts) => {
   const bytes = await fetchBytes(url, opts);
   const text = new TextDecoder().decode(bytes);
   try {
-    return JSON.parse(text);
+    const value: unknown = JSON.parse(text);
+    return value;
   } catch (err: unknown) {
     throw new ParseError(url, err);
   }

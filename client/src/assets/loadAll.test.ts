@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { loadAll, loadManifest, loadSequential, type Manifest } from "./loadAll.ts";
 import type { Loader, Loaders } from "./loader.ts";
@@ -105,7 +105,9 @@ test("a caller abort rejects with AbortError even though most assets are optiona
 test("an unknown asset type is rejected when the manifest is parsed — it never reaches loadAll", async () => {
   // `type: "video"` is not in the manifest schema, so TypeScript would refuse the object above and
   // the runtime check refuses the same thing arriving from the network.
-  const fetchImpl: Fetcher = async () =>
-    new Response(JSON.stringify({ assets: [{ id: "x", type: "video", url: "x.mp4" }] }));
+  const fetchImpl: Fetcher = () =>
+    Promise.resolve(
+      new Response(JSON.stringify({ assets: [{ id: "x", type: "video", url: "x.mp4" }] })),
+    );
   await assert.rejects(loadManifest("/manifest.json", { fetchImpl, attempts: 1 }), TypeError);
 });

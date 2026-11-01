@@ -3,13 +3,17 @@
 
 import type { Bus } from "./events.ts";
 
+/** `AbortSignal.reason` can be anything; a rejection should be an Error (DOMException is one). */
+const asError = (reason: unknown): Error =>
+  reason instanceof Error ? reason : new Error(String(reason));
+
 /** Rejects with an AbortError-like reason when `signal` aborts. Used to bail out of
  * `await`s that have no signal of their own (a backoff sleep, a decode). */
 export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return promise;
-  if (signal.aborted) return Promise.reject(signal.reason);
+  if (signal.aborted) return Promise.reject(asError(signal.reason));
   return new Promise<T>((resolve, reject) => {
-    const onAbort = (): void => reject(signal.reason);
+    const onAbort = (): void => reject(asError(signal.reason));
     signal.addEventListener("abort", onAbort, { once: true });
     promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
   });
@@ -20,12 +24,12 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
 export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {
-      reject(signal.reason);
+      reject(asError(signal.reason));
       return;
     }
     const onAbort = (): void => {
       clearTimeout(id);
-      reject(signal?.reason);
+      reject(asError(signal?.reason));
     };
     const id = setTimeout(() => {
       signal?.removeEventListener("abort", onAbort);

@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import {
   BINARY_SIZES,
@@ -332,7 +332,7 @@ test("JSON codec: round-trip is exact, and the version field never leaks into th
   const text = jsonCodec.encode(snap);
   assert.equal(typeof text, "string");
   assert.deepEqual(jsonCodec.decode(text), snap);
-  assert.ok(JSON.parse(text).v === 1);
+  assert.ok(text.startsWith('{"v":1,'));
   const input = inputMsg({ seq: seq(5), tick: tick(4), turn: 1, fire: true });
   assert.deepEqual(jsonCodec.decode(jsonCodec.encode(input)), input);
 });

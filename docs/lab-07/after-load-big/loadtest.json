@@ -1,0 +1,54 @@
+{
+  "seconds": 20,
+  "procs": 3,
+  "points": [
+    {
+      "mode": "room",
+      "n": 192,
+      "joined": 192,
+      "matches": 1,
+      "tickMeanMs": 7.8,
+      "tickP99Ms": 21.42,
+      "tickMaxMs": 34.59,
+      "latenessP99Ms": 1.12,
+      "tickBusyPct": 23.41,
+      "eventLoopUtilizationPct": 35.64,
+      "rssMB": 150.49,
+      "heapMB": 28.84,
+      "kbPerSecOut": 27783.4,
+      "skippedTicks": 0
+    },
+    {
+      "mode": "room",
+      "n": 256,
+      "joined": 256,
+      "matches": 1,
+      "tickMeanMs": 10.35,
+      "tickP99Ms": 17.35,
+      "tickMaxMs": 103.42,
+      "latenessP99Ms": 1.39,
+      "tickBusyPct": 31.04,
+      "eventLoopUtilizationPct": 45.66,
+      "rssMB": 150.9,
+      "heapMB": 30.92,
+      "kbPerSecOut": 42529.58,
+      "skippedTicks": 17
+    },
+    {
+      "mode": "room",
+      "n": 320,
+      "joined": 320,
+      "matches": 1,
+      "tickMeanMs": 13.2,
+      "tickP99Ms": 24.34,
+      "tickMaxMs": 124.39,
+      "latenessP99Ms": 5.23,
+      "tickBusyPct": 39.59,
+      "eventLoopUtilizationPct": 56.73,
+      "rssMB": 155.21,
+      "heapMB": 32.83,
+      "kbPerSecOut": 61806.21,
+      "skippedTicks": 61
+    }
+  ]
+}

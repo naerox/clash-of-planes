@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
@@ -29,7 +29,7 @@ function start(env: Record<string, string>) {
       const m = out.match(/"msg":"listening","url":"(http:\/\/[^"]+)"/);
       if (m?.[1]) resolve(m[1]);
     });
-    exited.then(({ code }) => reject(new Error(`exited early with ${code}: ${err}`)));
+    void exited.then(({ code }) => reject(new Error(`exited early with ${code}: ${err}`)));
   });
   return { child, ready, exited, output: () => out };
 }

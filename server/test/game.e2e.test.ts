@@ -1,6 +1,6 @@
 // The authoritative game over REAL sockets: inputs up, snapshots down, in both codecs.
 
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import {
   CLOSE,

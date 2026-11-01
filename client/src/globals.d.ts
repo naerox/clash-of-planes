@@ -9,6 +9,8 @@ import type { Connection } from "./net/connection.ts";
 
 declare global {
   interface Window {
+    /** Allocation-free timing of the hot paths (perf.ts); `?trace=1` also feeds DevTools. */
+    __perf?: typeof import("./perf.ts");
     __bench?: BenchResult;
     __determinism?: ReturnType<typeof runDeterminismCheck>;
     __net?: {

@@ -14,6 +14,8 @@ export function createHudFeed(bus: GameBus) {
   const ac = new AbortController();
   const counts = { fired: 0, hits: 0, explosions: 0 };
   const feed: { text: string; at: number }[] = [];
+  const slots: { text: string; alpha: number }[] = [];
+  const shown: { text: string; alpha: number }[] = [];
 
   const push = (text: string): void => {
     feed.push({ text, at: performance.now() });
@@ -40,11 +42,22 @@ export function createHudFeed(bus: GameBus) {
 
   return {
     counts,
-    /** Feed entries younger than FEED_MS, with 0..1 opacity for fading out. */
-    recent(now = performance.now()): FeedEntry[] {
-      return feed
-        .filter((f) => now - f.at < FEED_MS)
-        .map((f) => ({ text: f.text, alpha: 1 - (now - f.at) / FEED_MS }));
+    /**
+     * Feed entries younger than FEED_MS, with 0..1 opacity for fading out. The array and the
+     * entries in it are reused between calls (there are at most four): read them before the next call.
+     */
+    recent(now = performance.now()): readonly FeedEntry[] {
+      shown.length = 0;
+      for (let i = 0; i < feed.length; i++) {
+        const f = feed[i];
+        if (!f || now - f.at >= FEED_MS) continue;
+        const entry = slots[shown.length] ?? { text: "", alpha: 0 };
+        slots[shown.length] = entry;
+        entry.text = f.text;
+        entry.alpha = 1 - (now - f.at) / FEED_MS;
+        shown.push(entry);
+      }
+      return shown;
     },
     dispose: () => ac.abort(),
   };

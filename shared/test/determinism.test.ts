@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { EXPECTED_HASH, Rng, Ship, hashWorld, runScenario } from "../src/index.ts";
 
@@ -25,6 +25,7 @@ test("the scenario really exercises the sim: shooting, hits, deaths and spawns a
 });
 
 test("the hash is sensitive: Math.random() inside integrate makes two runs disagree", () => {
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- patched on purpose, restored below
   const original = Ship.prototype.integrate;
   Ship.prototype.integrate = function noisy(controls, dt) {
     original.call(this, controls, dt);

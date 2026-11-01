@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { Lobby, parseRooms, validateName, type LobbyEvents } from "./lobby.ts";
 import { once, sleep } from "../async.ts";
@@ -13,15 +13,19 @@ const ROOMS = {
 
 function fakeFetch(handler: (signal: AbortSignal | undefined, n: number) => unknown = () => ROOMS) {
   const calls: { url: string; signal: AbortSignal | undefined }[] = [];
-  const fetchJson: FetchJson = async (url, opts) => {
+  const fetchJson: FetchJson = (url, opts) => {
     calls.push({ url, signal: opts?.signal });
-    return handler(opts?.signal, calls.length);
+    return Promise.resolve(handler(opts?.signal, calls.length));
   };
   return { fetchJson, calls };
 }
 
 const hangUntilAborted = (signal: AbortSignal | undefined): Promise<never> =>
-  new Promise((_, reject) => signal?.addEventListener("abort", () => reject(signal.reason)));
+  new Promise((_, reject) =>
+    signal?.addEventListener("abort", () =>
+      reject(signal.reason instanceof Error ? signal.reason : new Error("aborted")),
+    ),
+  );
 
 test("validateName trims and bounds the name", () => {
   assert.deepEqual(validateName("  Ace "), { ok: true, name: "Ace" });
@@ -102,9 +106,15 @@ test("join validates, stops polling and emits join with the room config", async 
 
 test("createRoom POSTs once (no retries), adds the room to the list and emits 'created'", async () => {
   const calls: { url: string; opts: FetchOptions | undefined }[] = [];
-  const fetchJson: FetchJson = async (url, opts) => {
+  const fetchJson: FetchJson = (url, opts) => {
     calls.push({ url, opts });
-    return { id: "belt-ab12", name: "Belt", players: 0, maxPlayers: 4, arena: { asteroids: 8 } };
+    return Promise.resolve({
+      id: "belt-ab12",
+      name: "Belt",
+      players: 0,
+      maxPlayers: 4,
+      arena: { asteroids: 8 },
+    });
   };
   const lobby = new Lobby({ fetchJson });
   const created = once(lobby, "created");
@@ -118,7 +128,7 @@ test("createRoom POSTs once (no retries), adds the room to the list and emits 'c
   const init = calls[0]?.opts?.init;
   assert.equal(calls[0]?.opts?.attempts, 1);
   assert.equal(init?.method, "POST");
-  assert.deepEqual(JSON.parse(String(init?.body)), {
+  assert.deepEqual(JSON.parse(typeof init?.body === "string" ? init.body : ""), {
     name: "Belt",
     arena: { asteroids: 8 },
     maxPlayers: 4,
@@ -127,9 +137,7 @@ test("createRoom POSTs once (no retries), adds the room to the list and emits 'c
 
 test("createRoom passes the server's refusal on to the caller", async () => {
   const lobby = new Lobby({
-    fetchJson: async () => {
-      throw new Error("HTTP 409 Conflict: server is limited to 20 rooms");
-    },
+    fetchJson: () => Promise.reject(new Error("HTTP 409 Conflict: server is limited to 20 rooms")),
   });
   await assert.rejects(lobby.createRoom({ name: "x", arena: {} }), /limited to 20 rooms/);
   assert.deepEqual(lobby.rooms, []);

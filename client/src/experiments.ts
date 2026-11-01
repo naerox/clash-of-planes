@@ -116,6 +116,7 @@ export function runBugDemo(mode: string, ship: Ship, world: World): void {
     // (a) The way the lab text puts it simplest: call the bare reference yourself, with
     // no receiver at all. Plain `f()` — rule 4, default binding — `this` is `undefined`
     // in strict mode (every ES module is strict), so `this.#cooldown` throws immediately.
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- THE BUG being demonstrated
     const bareFire = ship.fire;
     try {
       bareFire(world);

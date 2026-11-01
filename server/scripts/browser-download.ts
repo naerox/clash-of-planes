@@ -96,7 +96,7 @@ await page.evaluate((url: string) => {
   const w: Window & { __bytes?: number; __ac?: AbortController } = window;
   w.__bytes = 0;
   w.__ac = new AbortController();
-  fetch(url, { signal: w.__ac.signal }).then(async (res) => {
+  void fetch(url, { signal: w.__ac.signal }).then(async (res) => {
     const reader = res.body?.getReader();
     if (!reader) return;
     for (;;) {

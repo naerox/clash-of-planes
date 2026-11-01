@@ -31,6 +31,7 @@ import {
 } from "./rooms.ts";
 import { TokenBucket } from "./rateLimit.ts";
 import { NetSim } from "./netsim.ts";
+import { startHeartbeat } from "./heartbeat.ts";
 
 /** A WebSocket close reason may be at most 123 BYTES. Reasons here can echo client input
  * (an unknown message type, say), and `socket.close()` throws on a longer one — so cut it
@@ -258,6 +259,12 @@ export function attachWebSocket({ server, rooms, config, log }: WsDeps) {
           state.net.out.send(() => send.raw(data, { critical: false }));
           return bytes;
         },
+        /** A frame the match encoded for us (see `Match.#broadcast`): the same path, minus the encoding. */
+        deliverFrame(data) {
+          state.stats.bytesOut += data.length;
+          state.net.out.send(() => send.raw(data, { critical: false }));
+          return data.length;
+        },
         /** Pongs: same path, same codec, but critical enough that we do not drop them for lag. */
         deliverControl(message) {
           const data = codec.encode(message);
@@ -360,23 +367,13 @@ export function attachWebSocket({ server, rooms, config, log }: WsDeps) {
     }
   });
 
-  // Heartbeat: one timer for all sockets. Each tick pings; every pong resets `missed`.
-  // A socket that has left maxMissedPongs pings unanswered is dead (a laptop lid, a NAT that
-  // forgot the mapping): TCP would not tell us for minutes, so we terminate it ourselves.
-  const heartbeat = setInterval(() => {
-    for (const socket of wss.clients) {
-      const state = states.get(socket);
-      if (!state) continue;
-      if (state.missed >= config.maxMissedPongs) {
-        log.warn("heartbeat lost", { missed: state.missed });
-        socket.terminate();
-        continue;
-      }
-      state.missed++;
-      socket.ping();
-    }
-  }, config.heartbeatMs);
-  heartbeat.unref();
+  const stopHeartbeat = startHeartbeat({
+    clients: () => wss.clients,
+    stateOf: (socket) => states.get(socket),
+    intervalMs: config.heartbeatMs,
+    maxMissedPongs: config.maxMissedPongs,
+    log,
+  });
 
   return {
     wss,
@@ -385,7 +382,7 @@ export function attachWebSocket({ server, rooms, config, log }: WsDeps) {
     },
     /** Tell every client we are going away (1001), give them `graceMs`, then cut the rest. */
     async close(graceMs = config.shutdownGraceMs): Promise<void> {
-      clearInterval(heartbeat);
+      stopHeartbeat();
       for (const socket of wss.clients) socket.close(CLOSE.GOING_AWAY, "server shutting down");
       const deadline = Date.now() + graceMs;
       while (wss.clients.size > 0 && Date.now() < deadline) {

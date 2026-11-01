@@ -6,6 +6,15 @@ import { jsonCodec } from "./json.ts";
 export { binaryCodec, jsonCodec };
 export type { AnyCodec, BinaryCodec, Codec, JsonCodec } from "./codec.ts";
 export { CodecError } from "./errors.ts";
+export { SnapshotFanout } from "./binary.ts";
+export {
+  SnapshotRecycler,
+  newAsteroid,
+  newBullet,
+  newPickup,
+  newShip,
+  type Mutable,
+} from "./recycler.ts";
 export { SIZES as BINARY_SIZES } from "./binary.ts";
 
 export function getCodec(name: "binary"): BinaryCodec;

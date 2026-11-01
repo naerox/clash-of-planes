@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { Link, NetSim } from "../src/netsim.ts";
 import type { Schedule } from "../src/schedule.ts";

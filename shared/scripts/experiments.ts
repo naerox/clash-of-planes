@@ -144,6 +144,7 @@ if (run(5)) {
   const a = scenarioHash();
   const b = scenarioHash();
   console.log("run 1:", a, " run 2:", b, a === b ? "(identical)" : "(DIFFERENT!)");
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- patched on purpose, restored below
   const original = Ship.prototype.integrate;
   Ship.prototype.integrate = function noisy(this: Ship, controls: Controls, dt: number): void {
     original.call(this, controls, dt);

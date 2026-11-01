@@ -1,0 +1,2 @@
+fc.double  4947/5000 values changed on the way through a float32
+fc.float   0/5000 values changed on the way through a float32

@@ -9,6 +9,8 @@
 import {
   CodecError,
   NO_SEQ,
+  entityId,
+  SnapshotRecycler,
   TICK_ZERO,
   getCodec,
   seq as toSeq,
@@ -16,6 +18,7 @@ import {
   type AnyCodec,
   type EntityId,
   type InputMessage,
+  type Mutable,
   type JoinedMessage,
   type PingMessage,
   type PongMessage,
@@ -27,11 +30,17 @@ import {
   type Tick,
 } from "@dogfight/shared";
 import { emitSimEvent, type GameBus } from "../events.ts";
+import { SPAN, record } from "../perf.ts";
 import type { PlayerControls } from "../input.ts";
-import { SnapshotBuffer, interpolateRemote, type RemoteScene } from "./snapshotBuffer.ts";
+import {
+  RemoteScratch,
+  SnapshotBuffer,
+  interpolateRemote,
+  type RemoteScene,
+} from "./snapshotBuffer.ts";
 import { Predictor, SNAP_DISTANCE } from "./predictor.ts";
 import { NetStats } from "./netstats.ts";
-import type { DrawBullet, DrawShip, Scene } from "./scene.ts";
+import { SceneScratch, type Scene } from "./scene.ts";
 
 export interface SessionOptions {
   predict: boolean; // false = the "dumb client" of M1: the ship moves only when a snapshot says so
@@ -48,6 +57,37 @@ export const DEFAULT_OPTIONS: Readonly<SessionOptions> = Object.freeze({
   interpMs: 100,
   chaos: 0,
 });
+
+const newYou = (): Mutable<ShipState> => ({
+  id: entityId(0),
+  x: 0,
+  y: 0,
+  vx: 0,
+  vy: 0,
+  angle: 0,
+  hp: 0,
+  cooldown: 0,
+  rapid: 0,
+  respawn: 0,
+  score: 0,
+  thrusting: false,
+});
+
+function copyState(d: Mutable<ShipState>, s: ShipState): ShipState {
+  d.id = s.id;
+  d.x = s.x;
+  d.y = s.y;
+  d.vx = s.vx;
+  d.vy = s.vy;
+  d.angle = s.angle;
+  d.hp = s.hp;
+  d.cooldown = s.cooldown;
+  d.rapid = s.rapid;
+  d.respawn = s.respawn;
+  d.score = s.score;
+  d.thrusting = s.thrusting;
+  return d;
+}
 
 const EMPTY_REMOTE: RemoteScene = { ships: [], bullets: [], asteroids: [], pickups: [] };
 
@@ -76,9 +116,14 @@ export class GameSession {
   shipId: EntityId | null = null;
   playerId = "";
   serverTick: Tick = TICK_ZERO;
-  buffer = new SnapshotBuffer();
+  buffer: SnapshotBuffer;
   predictor: Predictor | null = null; // created from the first snapshot that carries our ship
   latestYou: ShipState | null = null;
+  readonly #youRecord: Mutable<ShipState> = newYou();
+  /** Decoded snapshots are built from, and returned to, this pool (binary codec only). */
+  readonly #recycler = new SnapshotRecycler();
+  readonly #remote = new RemoteScratch();
+  readonly #visual = { x: 0, y: 0, angle: 0 };
   ack: Seq = NO_SEQ;
   lastFrameSize = 0;
 
@@ -97,14 +142,21 @@ export class GameSession {
     this.options = { ...DEFAULT_OPTIONS, ...options };
     this.codec = getCodec(joined.codec);
     this.stats = new NetStats({ now });
+    this.buffer = this.#newBuffer();
     this.#bind(joined);
+  }
+
+  #newBuffer(): SnapshotBuffer {
+    return new SnapshotBuffer({
+      onEvict: this.codec.binary ? (m) => this.#recycler.release(m) : undefined,
+    });
   }
 
   #bind(joined: JoinedMessage): void {
     this.shipId = joined.shipId;
     this.playerId = joined.you;
     this.serverTick = joined.tick;
-    this.buffer = new SnapshotBuffer();
+    this.buffer = this.#newBuffer();
     this.predictor = null;
     this.latestYou = null;
     this.ack = NO_SEQ;
@@ -181,7 +233,9 @@ export class GameSession {
     }
     let message;
     try {
-      message = codec.decode(new Uint8Array(arrayBuffer));
+      const t0 = performance.now();
+      message = codec.decode(new Uint8Array(arrayBuffer), this.#recycler);
+      record(SPAN.decode, t0);
     } catch (err: unknown) {
       if (!(err instanceof CodecError)) throw err;
       this.stats.badFrames++;
@@ -209,13 +263,16 @@ export class GameSession {
   }
 
   #onSnapshot(snap: SnapshotMessage): void {
-    if (!this.buffer.push(snap, this.now())) return; // older than one we already have
+    if (!this.buffer.push(snap, this.now())) {
+      if (this.codec.binary) this.#recycler.release(snap); // older than one we already have
+      return;
+    }
     this.serverTick = snap.tick;
     this.stats.onSnapshot(snap, this.lastFrameSize);
     this.ack = snap.ack;
 
     if (snap.you) {
-      this.latestYou = snap.you;
+      this.latestYou = copyState(this.#youRecord, snap.you); // the snapshot's own record gets recycled
       const { predict, reconcile } = this.options;
       if (!this.predictor && predict) {
         this.predictor = new Predictor({
@@ -225,7 +282,9 @@ export class GameSession {
         });
       } else if (this.predictor && predict) {
         if (reconcile) {
+          const t0 = performance.now();
           const error = this.predictor.reconcile(snap.you, snap.ack, snap.bullets);
+          record(SPAN.reconcile, t0);
           // a respawn is the server MOVING our ship, not our prediction being wrong: count it
           // apart, or one death would drown every other number on the netgraph
           if (error > SNAP_DISTANCE) this.stats.onTeleport();
@@ -255,81 +314,115 @@ export class GameSession {
    * steps (the loop's accumulator); `frameMs`: time since the previous render, for the
    * correction smoothing.
    */
-  render(nowMs: number, alpha: number, frameMs = 16.7): Scene {
+  render(
+    nowMs: number,
+    alpha: number,
+    frameMs = 16.7,
+    out: SceneScratch = new SceneScratch(),
+  ): Scene {
     const { predict, smoothMs, interpMs } = this.options;
     const sample = this.buffer.sample(this.buffer.renderTick(nowMs, interpMs));
     this.stats.onRender(sample ? sample.starved : true);
-    const remote = sample ? interpolateRemote(sample) : EMPTY_REMOTE;
-
-    const ships: DrawShip[] = remote.ships.map((s) => ({
-      ...s,
-      isMe: false,
-      name: this.names.get(s.id) ?? "?",
-    }));
-    let me: DrawShip | null = null;
-    let bullets: DrawBullet[] = [...remote.bullets];
+    const remote = sample ? interpolateRemote(sample, this.#remote) : EMPTY_REMOTE;
     const shipId = this.shipId;
+
+    // other players
+    let nShips = 0;
+    for (let si = 0; si < remote.ships.length; si++) {
+      const s = remote.ships[si];
+      if (!s) continue;
+      const d = out.shipAt(nShips++);
+      d.id = s.id;
+      d.x = s.x;
+      d.y = s.y;
+      d.angle = s.angle;
+      d.thrusting = s.thrusting;
+      d.dead = s.dead;
+      d.hp = s.hp;
+      d.score = s.score;
+      d.rapid = s.rapid;
+      d.isMe = false;
+      d.name = this.names.get(s.id) ?? "?";
+      d.respawn = 0;
+      out.ships[nShips - 1] = d;
+    }
+
+    let me: SceneScratch["me"] = null;
+    let nBullets = 0;
+    const ownShotsPredicted = shipId !== null && predict && this.predictor !== null;
+    for (let bi = 0; bi < remote.bullets.length; bi++) {
+      const b = remote.bullets[bi];
+      if (!b) continue;
+      // our own bullets come from prediction (instantly, and without the interpolation delay)
+      if (ownShotsPredicted && b.owner === shipId) continue;
+      const d = out.bulletAt(nBullets);
+      d.id = b.id;
+      d.owner = b.owner;
+      d.x = b.x;
+      d.y = b.y;
+      d.seq = b.seq;
+      out.bullets[nBullets++] = d;
+    }
 
     if (shipId !== null && predict && this.predictor) {
       const p = this.predictor;
       p.decay(frameMs, smoothMs);
-      const v = p.visual(alpha);
+      const v = p.visual(alpha, this.#visual);
       const ship = p.ship;
-      me = {
-        id: shipId,
-        x: v.x,
-        y: v.y,
-        angle: v.angle,
-        thrusting: ship.thrusting,
-        dead: ship.isDead,
-        hp: ship.hp,
-        score: ship.score,
-        respawn: ship.respawnTimer,
-        rapid: ship.rapidTimer > 0,
-        isMe: true,
-        name: this.names.get(shipId) ?? "me",
-      };
-      // our own bullets come from prediction (instantly, and without the interpolation delay)
-      bullets = remote.bullets.filter((b) => b.owner !== shipId);
-      for (const b of p.bullets) {
+      const m = out.meRecord;
+      m.id = shipId;
+      m.x = v.x;
+      m.y = v.y;
+      m.angle = v.angle;
+      m.thrusting = ship.thrusting;
+      m.dead = ship.isDead;
+      m.hp = ship.hp;
+      m.score = ship.score;
+      m.respawn = ship.respawnTimer;
+      m.rapid = ship.rapidTimer > 0;
+      m.isMe = true;
+      m.name = this.names.get(shipId) ?? "me";
+      me = m;
+      for (let pi = 0; pi < p.bullets.length; pi++) {
+        const b = p.bullets[pi];
+        if (!b) continue;
         const prev = b.bullet.prevPos;
         const pos = b.bullet.pos;
-        bullets.push({
-          id: b.id,
-          owner: shipId,
-          x: prev.x + (pos.x - prev.x) * alpha,
-          y: prev.y + (pos.y - prev.y) * alpha,
-          seq: shotSeq(b.bullet.seq),
-        });
+        const d = out.bulletAt(nBullets);
+        d.id = b.id;
+        d.owner = shipId;
+        d.x = prev.x + (pos.x - prev.x) * alpha;
+        d.y = prev.y + (pos.y - prev.y) * alpha;
+        d.seq = shotSeq(b.bullet.seq);
+        out.bullets[nBullets++] = d;
       }
     } else if (shipId !== null && this.latestYou) {
       // the "dumb client": our ship is wherever the newest snapshot put it
       const y = this.latestYou;
-      me = {
-        id: shipId,
-        x: y.x,
-        y: y.y,
-        angle: y.angle,
-        thrusting: y.thrusting,
-        dead: y.respawn > 0,
-        hp: y.hp,
-        score: y.score,
-        respawn: y.respawn,
-        rapid: y.rapid > 0,
-        isMe: true,
-        name: this.names.get(shipId) ?? "me",
-      };
+      const m = out.meRecord;
+      m.id = shipId;
+      m.x = y.x;
+      m.y = y.y;
+      m.angle = y.angle;
+      m.thrusting = y.thrusting;
+      m.dead = y.respawn > 0;
+      m.hp = y.hp;
+      m.score = y.score;
+      m.respawn = y.respawn;
+      m.rapid = y.rapid > 0;
+      m.isMe = true;
+      m.name = this.names.get(shipId) ?? "me";
+      me = m;
     }
-    if (me && !me.dead) ships.push(me);
+    if (me && !me.dead) out.ships[nShips++] = me;
 
-    return {
-      ships,
-      me,
-      bullets,
-      asteroids: remote.asteroids,
-      pickups: remote.pickups,
-      starved: sample?.starved ?? true,
-    };
+    out.ships.length = nShips;
+    out.bullets.length = nBullets;
+    out.me = me;
+    out.asteroids = remote.asteroids;
+    out.pickups = remote.pickups;
+    out.starved = sample?.starved ?? true;
+    return out;
   }
 
   /** Everything worth looking at while debugging or measuring (exposed as `window.__net`). */

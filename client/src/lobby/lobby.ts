@@ -86,10 +86,12 @@ export class Lobby extends Bus<LobbyEvents> {
     // A hidden tab skips its polls; coming back refreshes at once instead of waiting.
     globalThis.document?.addEventListener(
       "visibilitychange",
-      () => this.#isVisible() && this.refresh(),
+      () => {
+        if (this.#isVisible()) void this.refresh();
+      },
       { signal },
     );
-    this.#poll(signal);
+    void this.#poll(signal);
   }
 
   /** Leaving the lobby: no more ticks, and the in-flight request is cancelled now. */

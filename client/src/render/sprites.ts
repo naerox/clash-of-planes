@@ -36,13 +36,16 @@ export class SpriteSheet {
   }
 
   /** Draws frame `name` centred on (x, y) in the current transform, sized so that its
-   * `r` maps onto `radius` world units. */
+   * `r` maps onto `radius` world units. (Positional arguments, not an options object: this runs
+   * hundreds of times a frame, and an object literal per call is garbage per call.) */
   draw(
     ctx: CanvasRenderingContext2D,
     name: string,
     x: number,
     y: number,
-    { angle = 0, radius, alpha = 1 }: { angle?: number; radius: number; alpha?: number },
+    angle: number,
+    radius: number,
+    alpha = 1,
   ): void {
     const f = this.frames[name];
     if (!f) return;

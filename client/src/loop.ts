@@ -48,6 +48,8 @@ export interface LoopOptions {
   simulate: (dt: number) => void;
   render: (alpha: number) => void;
   schedule?: FrameSchedule;
+  /** Called after every frame with the CPU time it took and the time since the previous frame (ms). */
+  onFrame?: (workMs: number, intervalMs: number) => void;
 }
 
 export function createLoop({
@@ -56,6 +58,7 @@ export function createLoop({
   simulate,
   render,
   schedule = rafSchedule,
+  onFrame,
 }: LoopOptions): { stats: LoopStats; start(): void; stop(): void } {
   const stats = createStats();
   const acc = createAccumulator({ step, maxFrame });
@@ -73,7 +76,9 @@ export function createLoop({
       stats.countStep();
     });
     render(acc.alpha);
-    stats.countFrame(now, delta * 1000, performance.now() - t0);
+    const work = performance.now() - t0;
+    stats.countFrame(now, delta * 1000, work);
+    onFrame?.(work, delta * 1000);
   }
 
   return {

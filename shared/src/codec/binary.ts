@@ -65,6 +65,7 @@ import type { SimEvent } from "../sim/events.ts";
 import type { PickupType } from "../sim/pickup.ts";
 import type { ShipState } from "../sim/ship.ts";
 import type { BinaryCodec } from "./codec.ts";
+import { SnapshotRecycler, type Mutable } from "./recycler.ts";
 import { CodecError } from "./errors.ts";
 
 const LE = true;
@@ -268,12 +269,9 @@ function writeEvent(w: Writer, e: SimEvent): void {
   }
 }
 
-function encodeSnapshot(m: SnapshotMessage): Writer {
-  const size =
-    SIZES.snapshotHeader +
-    (m.you ? SIZES.you : 0) +
-    1 +
-    m.ships.length * SIZES.ship +
+/** The part of a snapshot every client gets identically: bullets, asteroids, pickups, events. */
+function snapshotTailSize(m: SnapshotMessage): number {
+  return (
     2 +
     m.bullets.length * SIZES.bullet +
     1 +
@@ -281,38 +279,43 @@ function encodeSnapshot(m: SnapshotMessage): Writer {
     1 +
     m.pickups.length * SIZES.pickup +
     1 +
-    m.events.reduce((n, e) => n + eventSize(e), 0);
-  const w = new Writer(size);
+    m.events.reduce((n, e) => n + eventSize(e), 0)
+  );
+}
+
+function writeHead(w: Writer, tickNo: number, ack: number, you: ShipState | null): void {
   w.u8(TYPE.SNAPSHOT);
   w.u8(PROTOCOL_VERSION);
-  w.u32(m.tick);
-  w.u32(m.ack);
-  w.u8(m.you ? 1 : 0);
-  if (m.you) {
-    const y = m.you;
-    w.u16(y.id);
-    w.f32(y.x);
-    w.f32(y.y);
-    w.f32(y.vx);
-    w.f32(y.vy);
-    w.f32(y.angle);
-    w.u8(clampInt(y.hp, 0, 255));
-    w.u8(y.thrusting ? 1 : 0);
-    w.f32(y.cooldown);
-    w.f32(y.rapid);
-    w.f32(y.respawn);
-    w.u16(clampInt(y.score, 0, 65535));
+  w.u32(tickNo);
+  w.u32(ack);
+  w.u8(you ? 1 : 0);
+  if (you) {
+    w.u16(you.id);
+    w.f32(you.x);
+    w.f32(you.y);
+    w.f32(you.vx);
+    w.f32(you.vy);
+    w.f32(you.angle);
+    w.u8(clampInt(you.hp, 0, 255));
+    w.u8(you.thrusting ? 1 : 0);
+    w.f32(you.cooldown);
+    w.f32(you.rapid);
+    w.f32(you.respawn);
+    w.u16(clampInt(you.score, 0, 65535));
   }
-  w.u8(m.ships.length);
-  for (const s of m.ships) {
-    w.u16(s.id);
-    w.f32(s.x);
-    w.f32(s.y);
-    w.i16(angleToI16(s.angle));
-    w.u8(clampInt(s.hp, 0, 255));
-    w.u8((s.thrusting ? 1 : 0) | (s.dead ? 2 : 0) | (s.rapid ? 4 : 0));
-    w.u16(clampInt(s.score, 0, 65535));
-  }
+}
+
+function writeShip(w: Writer, s: ShipSnap): void {
+  w.u16(s.id);
+  w.f32(s.x);
+  w.f32(s.y);
+  w.i16(angleToI16(s.angle));
+  w.u8(clampInt(s.hp, 0, 255));
+  w.u8((s.thrusting ? 1 : 0) | (s.dead ? 2 : 0) | (s.rapid ? 4 : 0));
+  w.u16(clampInt(s.score, 0, 65535));
+}
+
+function writeTail(w: Writer, m: SnapshotMessage): void {
   w.u16(m.bullets.length);
   for (const b of m.bullets) {
     w.u16(b.id);
@@ -339,7 +342,71 @@ function encodeSnapshot(m: SnapshotMessage): Writer {
   }
   w.u8(m.events.length);
   for (const e of m.events) writeEvent(w, e);
+}
+
+function encodeSnapshot(m: SnapshotMessage): Writer {
+  const size =
+    SIZES.snapshotHeader +
+    (m.you ? SIZES.you : 0) +
+    1 +
+    m.ships.length * SIZES.ship +
+    snapshotTailSize(m);
+  const w = new Writer(size);
+  writeHead(w, m.tick, m.ack, m.you);
+  w.u8(m.ships.length);
+  for (const s of m.ships) writeShip(w, s);
+  writeTail(w, m);
   return w;
+}
+
+/**
+ * One tick's snapshot for MANY clients. Everything in a snapshot except the header, `you` and
+ * the absence of the receiver's own ship is the same for every client, so the ship records and
+ * the tail are encoded ONCE and each client's frame is those bytes copied around its own head.
+ * `frame()` is byte-for-byte what `binaryCodec.encode` gives for the equivalent per-client
+ * snapshot (a test checks exactly that) — only cheaper: a `memcpy` instead of ~N·10 DataView writes.
+ */
+export class SnapshotFanout {
+  readonly #tick: number;
+  readonly #ids: number[];
+  readonly #ships: Uint8Array;
+  readonly #tail: Uint8Array;
+
+  /** `shared.ships` lists EVERY ship; `shared.you` is ignored. */
+  constructor(shared: SnapshotMessage) {
+    this.#tick = shared.tick;
+    this.#ids = shared.ships.map((s) => s.id);
+    const ships = new Writer(shared.ships.length * SIZES.ship);
+    for (const s of shared.ships) writeShip(ships, s);
+    this.#ships = new Uint8Array(ships.buffer);
+    const tail = new Writer(snapshotTailSize(shared));
+    writeTail(tail, shared);
+    this.#tail = new Uint8Array(tail.buffer);
+  }
+
+  /** The frame for the client whose ship is `you.id` (its own ship is left out of the list). */
+  frame(you: ShipState | null, ack: number): Uint8Array {
+    const own = you ? this.#ids.indexOf(you.id) : -1;
+    const n = this.#ids.length - (own >= 0 ? 1 : 0);
+    const head = SIZES.snapshotHeader + (you ? SIZES.you : 0);
+    const w = new Writer(head + 1 + n * SIZES.ship + this.#tail.length);
+    writeHead(w, this.#tick, ack, you);
+    w.u8(n);
+    const out = new Uint8Array(w.buffer);
+    let o = w.o;
+    const ships = this.#ships;
+    if (own < 0) {
+      out.set(ships, o);
+      o += ships.length;
+    } else {
+      out.set(ships.subarray(0, own * SIZES.ship), o);
+      o += own * SIZES.ship;
+      out.set(ships.subarray((own + 1) * SIZES.ship), o);
+      o += (this.#ids.length - own - 1) * SIZES.ship;
+    }
+    out.set(this.#tail, o);
+    return out;
+  }
 }
 
 // ── decoders ─────────────────────────────────────────────────────────────────────────
@@ -379,69 +446,64 @@ function pickupName(code: number): PickupType {
   return name;
 }
 
-function readYou(r: Reader): ShipState {
-  return {
-    id: r.id(),
-    x: r.f32(),
-    y: r.f32(),
-    vx: r.f32(),
-    vy: r.f32(),
-    angle: r.f32(),
-    hp: r.u8(),
-    thrusting: r.bool(r.u8(), 1),
-    cooldown: r.f32(),
-    rapid: r.f32(),
-    respawn: r.f32(),
-    score: r.u16(),
-  };
+// Each reader FILLS a record it is given (a recycled one, see recycler.ts) — or a fresh one when
+// there is no recycler. The reads happen in wire order, one statement each.
+
+function readYou(r: Reader, into: Mutable<ShipState>): ShipState {
+  into.id = r.id();
+  into.x = r.f32();
+  into.y = r.f32();
+  into.vx = r.f32();
+  into.vy = r.f32();
+  into.angle = r.f32();
+  into.hp = r.u8();
+  into.thrusting = r.bool(r.u8(), 1);
+  into.cooldown = r.f32();
+  into.rapid = r.f32();
+  into.respawn = r.f32();
+  into.score = r.u16();
+  return into;
 }
 
-function readShip(r: Reader): ShipSnap {
-  const id = r.id();
-  const x = r.f32();
-  const y = r.f32();
-  const angle = r.i16() / 1000;
-  const hp = r.u8();
+function readShip(r: Reader, into: ShipSnap): ShipSnap {
+  into.id = r.id();
+  into.x = r.f32();
+  into.y = r.f32();
+  into.angle = r.i16() / 1000;
+  into.hp = r.u8();
   const f = r.u8();
-  return {
-    kind: "ship",
-    id,
-    x,
-    y,
-    angle,
-    hp,
-    thrusting: r.bool(f, 1),
-    dead: r.bool(f, 2),
-    rapid: r.bool(f, 4),
-    score: r.u16(),
-  };
+  into.thrusting = r.bool(f, 1);
+  into.dead = r.bool(f, 2);
+  into.rapid = r.bool(f, 4);
+  into.score = r.u16();
+  return into;
 }
 
-function readBullet(r: Reader): BulletSnap {
-  return {
-    kind: "bullet",
-    id: r.id(),
-    owner: r.id(),
-    x: r.f32(),
-    y: r.f32(),
-    seq: shotSeq(r.u16()),
-  };
+function readBullet(r: Reader, into: BulletSnap): BulletSnap {
+  into.id = r.id();
+  into.owner = r.id();
+  into.x = r.f32();
+  into.y = r.f32();
+  into.seq = shotSeq(r.u16());
+  return into;
 }
 
-function readAsteroid(r: Reader): AsteroidSnap {
-  const id = r.id();
-  const x = r.f32();
-  const y = r.f32();
-  const angle = r.i16() / 1000;
-  const radius = r.u8();
-  return { kind: "asteroid", id, x, y, angle, radius, hunter: r.bool(r.u8(), 1) };
+function readAsteroid(r: Reader, into: AsteroidSnap): AsteroidSnap {
+  into.id = r.id();
+  into.x = r.f32();
+  into.y = r.f32();
+  into.angle = r.i16() / 1000;
+  into.radius = r.u8();
+  into.hunter = r.bool(r.u8(), 1);
+  return into;
 }
 
-function readPickup(r: Reader): PickupSnap {
-  const id = r.id();
-  const x = r.f32();
-  const y = r.f32();
-  return { kind: "pickup", id, x, y, variant: pickupName(r.u8()) };
+function readPickup(r: Reader, into: PickupSnap): PickupSnap {
+  into.id = r.id();
+  into.x = r.f32();
+  into.y = r.f32();
+  into.variant = pickupName(r.u8());
+  return into;
 }
 
 function readEvent(r: Reader): SimEvent {
@@ -469,25 +531,28 @@ function readEvent(r: Reader): SimEvent {
   }
 }
 
-function readList<T>(count: number, read: () => T): T[] {
-  const out: T[] = [];
-  for (let n = count; n > 0; n--) out.push(read());
-  return out;
+function decodeSnapshot(r: Reader, pool: SnapshotRecycler): SnapshotMessage {
+  const m = pool.message();
+  try {
+    m.tick = r.tick();
+    m.ack = r.seq();
+    const flags = r.u8();
+    m.you = r.bool(flags, 1) ? readYou(r, pool.state()) : null;
+    for (let n = r.u8(); n > 0; n--) m.ships.push(readShip(r, pool.ship()));
+    for (let n = r.u16(); n > 0; n--) m.bullets.push(readBullet(r, pool.bullet()));
+    for (let n = r.u8(); n > 0; n--) m.asteroids.push(readAsteroid(r, pool.asteroid()));
+    for (let n = r.u8(); n > 0; n--) m.pickups.push(readPickup(r, pool.pickup()));
+    for (let n = r.u8(); n > 0; n--) m.events.push(readEvent(r));
+    r.end();
+    return m;
+  } catch (err) {
+    pool.release(m); // a bad frame must not leak what it had already taken
+    throw err;
+  }
 }
 
-function decodeSnapshot(r: Reader): SnapshotMessage {
-  const tickNo = r.tick();
-  const ack = r.seq();
-  const flags = r.u8();
-  const you = r.bool(flags, 1) ? readYou(r) : null;
-  const ships = readList(r.u8(), () => readShip(r));
-  const bullets = readList(r.u16(), () => readBullet(r));
-  const asteroids = readList(r.u8(), () => readAsteroid(r));
-  const pickups = readList(r.u8(), () => readPickup(r));
-  const events = readList(r.u8(), () => readEvent(r));
-  r.end();
-  return { type: "snapshot", tick: tickNo, ack, you, ships, bullets, asteroids, pickups, events };
-}
+/** Without a recycler every snapshot gets its own records, as before. */
+const ONE_SHOT = (): SnapshotRecycler => new SnapshotRecycler();
 
 export const binaryCodec: BinaryCodec = {
   name: "binary",
@@ -512,14 +577,14 @@ export const binaryCodec: BinaryCodec = {
   },
 
   /** @throws {CodecError} on anything malformed: short, long, wrong version, out of range */
-  decode(data: ArrayBuffer | Uint8Array): GameMessage {
+  decode(data: ArrayBuffer | Uint8Array, recycler?: SnapshotRecycler): GameMessage {
     const r = new Reader(data);
     const type = header(r);
     switch (type) {
       case TYPE.INPUT:
         return decodeInput(r);
       case TYPE.SNAPSHOT:
-        return decodeSnapshot(r);
+        return decodeSnapshot(r, recycler ?? ONE_SHOT());
       case TYPE.PING: {
         const t = r.u32();
         r.end();

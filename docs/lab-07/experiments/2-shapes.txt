@@ -1,0 +1,14 @@
+shapes in the array | ms per pass over 1M objects
+1  (monomorphic)     | 6.44
+2  (polymorphic)     | 6.28
+4  (polymorphic)     | 5.97
+5  (megamorphic)     | 8.23
+20  (megamorphic)    | 12.01
+Float32Array         | 1.45
+shapes in the array | ms per pass over 1M objects
+1  (monomorphic)     | 5.87
+2  (polymorphic)     | 5.67
+4  (polymorphic)     | 5.93
+5  (megamorphic)     | 8.09
+20  (megamorphic)    | 8.15
+Float32Array         | 1.26

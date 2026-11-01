@@ -36,8 +36,8 @@ if (mode === "pipeline") {
       for (;;) yield Buffer.alloc(CHUNK); // endless
     })(),
   );
-  await pipeline(source, slow, { signal: ac.signal }).catch((err) => {
-    if (err.name !== "AbortError") throw err;
+  await pipeline(source, slow, { signal: ac.signal }).catch((err: unknown) => {
+    if (!(err instanceof Error && err.name === "AbortError")) throw err;
   });
   clearInterval(ticker);
 } else if (mode === "naive") {
