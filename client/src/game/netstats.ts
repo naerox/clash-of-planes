@@ -4,39 +4,121 @@
 const WINDOW_MS = 1000;
 const RECENT = 150; // the netgraph's "recent": 150 snapshots = 5 s
 
-/** Bytes-per-second over a sliding window. */
+/**
+ * Bytes-per-second over a sliding window — in two preallocated ring buffers, so recording an
+ * event and asking for the rate allocate nothing (Lab 7: this used to push a `[time, bytes]` tuple
+ * per frame and `shift()`/`reduce()` them, which the allocation profile ranked first).
+ */
 class Rate {
-  #events: [at: number, bytes: number][] = [];
+  readonly #at = new Float64Array(512);
+  readonly #bytes = new Float64Array(512);
+  #head = 0; // index of the oldest event
+  #size = 0;
+
   add(now: number, bytes: number): void {
-    this.#events.push([now, bytes]);
+    const cap = this.#at.length;
+    if (this.#size === cap) {
+      this.#head = (this.#head + 1) % cap; // full: forget the oldest
+      this.#size--;
+    }
+    const slot = (this.#head + this.#size) % cap;
+    this.#at[slot] = now;
+    this.#bytes[slot] = bytes;
+    this.#size++;
   }
+
   perSecond(now: number): number {
-    while (this.#events.length && now - (this.#events[0]?.[0] ?? now) > WINDOW_MS)
-      this.#events.shift();
-    return this.#events.reduce((sum, [, b]) => sum + b, 0) / (WINDOW_MS / 1000);
+    const cap = this.#at.length;
+    while (this.#size > 0 && now - (this.#at[this.#head] ?? now) > WINDOW_MS) {
+      this.#head = (this.#head + 1) % cap;
+      this.#size--;
+    }
+    let sum = 0;
+    for (let i = 0; i < this.#size; i++) sum += this.#bytes[(this.#head + i) % cap] ?? 0;
+    return sum / (WINDOW_MS / 1000);
   }
 }
 
+/**
+ * The last `size` numbers, in a typed-array ring. Every statistic is a loop over the ring: no
+ * `Math.max(...values)` (a spread of thousands of arguments), no `slice`, no `reduce` callback.
+ */
 class History {
-  readonly values: number[] = [];
   readonly size: number;
+  readonly #ring: Float64Array;
+  #next = 0;
+  #count = 0;
+
   constructor(size = 120) {
     this.size = size;
+    this.#ring = new Float64Array(size);
   }
+
   push(v: number): void {
-    this.values.push(v);
-    if (this.values.length > this.size) this.values.shift();
+    this.#ring[this.#next] = v;
+    this.#next = (this.#next + 1) % this.size;
+    if (this.#count < this.size) this.#count++;
   }
+
+  get length(): number {
+    return this.#count;
+  }
+
+  /** The `i`-th newest value (0 = the last one pushed). */
+  fromEnd(i: number): number {
+    return this.#ring[(this.#next - 1 - i + 2 * this.size) % this.size] ?? 0;
+  }
+
   get last(): number {
-    return this.values.at(-1) ?? 0;
+    return this.#count ? this.fromEnd(0) : 0;
   }
+
   get max(): number {
-    return this.values.length ? Math.max(...this.values) : 0;
+    return this.maxOfLast(this.#count);
   }
+
   get mean(): number {
-    return this.values.length ? this.values.reduce((s, v) => s + v, 0) / this.values.length : 0;
+    return this.meanOfLast(this.#count);
   }
-  /** The newest `n` values — what the netgraph shows, while `values` keeps a longer record. */
+
+  maxOfLast(n: number): number {
+    const m = Math.min(n, this.#count);
+    let max = 0;
+    for (let i = 0; i < m; i++) {
+      const v = this.fromEnd(i);
+      if (i === 0 || v > max) max = v;
+    }
+    return max;
+  }
+
+  meanOfLast(n: number): number {
+    const m = Math.min(n, this.#count);
+    let sum = 0;
+    for (let i = 0; i < m; i++) sum += this.fromEnd(i);
+    return m ? sum / m : 0;
+  }
+
+  /** Population standard deviation of everything held. */
+  get stdev(): number {
+    const mean = this.mean;
+    let sum = 0;
+    for (let i = 0; i < this.#count; i++) sum += (this.fromEnd(i) - mean) ** 2;
+    return this.#count ? Math.sqrt(sum / this.#count) : 0;
+  }
+
+  /** Writes the newest `n` values, oldest first, into `out`; returns how many. For the sparklines. */
+  copyRecent(n: number, out: Float64Array): number {
+    const m = Math.min(n, this.#count, out.length);
+    for (let i = 0; i < m; i++) out[m - 1 - i] = this.fromEnd(i);
+    return m;
+  }
+
+  /** A fresh array, oldest first. Allocates: for tests and scripts, not for the frame loop. */
+  get values(): number[] {
+    return Array.from({ length: this.#count }, (_, i) => this.fromEnd(this.#count - 1 - i));
+  }
+
+  /** The newest `n` values as a fresh array. Allocates: see `copyRecent`. */
   recent(n: number): number[] {
     return this.values.slice(-n);
   }
@@ -125,10 +207,27 @@ export class NetStats {
     if (starved) this.starved++;
   }
 
-  /** The numbers as one plain object (for the netgraph and for `window.__net`). */
+  #live: NetReport | null = null;
+  #liveAt = -Infinity;
+
+  /**
+   * The same numbers, but recomputed at most every 100 ms and handed out as the SAME object in
+   * between. The netgraph and the HUD ask every frame; at 60 fps that is six reports' worth of
+   * work (and six objects) thrown away for each one anyone could actually read.
+   */
+  liveReport(): NetReport {
+    const t = this.now();
+    if (this.#live === null || t - this.#liveAt >= 100) {
+      this.#live = this.report();
+      this.#liveAt = t;
+    }
+    return this.#live;
+  }
+
+  /** The numbers as one plain object (for tests and for `window.__net`): always fresh. */
   report(): NetReport {
     const t = this.now();
-    const jitter = this.rtt.values.length > 1 ? stdev(this.rtt.values) : 0;
+    const jitter = this.rtt.length > 1 ? this.rtt.stdev : 0;
     return {
       rttMs: this.rtt.last,
       rttMeanMs: this.rtt.mean,
@@ -140,8 +239,8 @@ export class NetStats {
       upBytesPerSec: this.up.perSecond(t),
       pendingInputs: this.pending,
       correction: this.corrections.last,
-      correctionMean: mean(this.corrections.recent(RECENT)),
-      correctionMax: Math.max(0, ...this.corrections.recent(RECENT)),
+      correctionMean: this.corrections.meanOfLast(RECENT),
+      correctionMax: this.corrections.maxOfLast(RECENT),
       teleports: this.teleports,
       snapshots: this.snapshots,
       lostSnapshots: this.lost,
@@ -153,15 +252,6 @@ export class NetStats {
       avgSnapshotBytes: this.snapshotBytes.mean,
     };
   }
-}
-
-function mean(xs: readonly number[]): number {
-  return xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0;
-}
-
-function stdev(xs: readonly number[]): number {
-  const mean = xs.reduce((s, x) => s + x, 0) / xs.length;
-  return Math.sqrt(xs.reduce((s, x) => s + (x - mean) ** 2, 0) / xs.length);
 }
 
 export { History };

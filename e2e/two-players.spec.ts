@@ -4,16 +4,6 @@
 
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
-interface NetHandle {
-  session: { shipId: number | null };
-  lastScene: { ships: { id: number; x: number; y: number; isMe: boolean }[] } | null;
-}
-declare global {
-  interface Window {
-    __net?: NetHandle;
-  }
-}
-
 async function enter(browser: Browser, roomName: string, pilot: string): Promise<Page> {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   const page = await context.newPage();

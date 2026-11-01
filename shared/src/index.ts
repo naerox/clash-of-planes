@@ -22,7 +22,13 @@ export { Bullet, BULLET_PARAMS } from "./sim/bullet.ts";
 export { Asteroid, ASTEROID_PARAMS, ASTEROID_CONTACT_DAMAGE } from "./sim/asteroid.ts";
 export { Pickup, PICKUP_KINDS, PICKUP_PARAMS, type PickupType } from "./sim/pickup.ts";
 export { attachHoming, applyHoming, HOMING_PARAMS, type Homing } from "./sim/homing.ts";
-export { circlesOverlap, findCollisions } from "./sim/collision.ts";
+export {
+  HASH_MIN_ENTITIES,
+  circlesOverlap,
+  findCollisions,
+  findCollisionsHashed,
+  findCollisionsNaive,
+} from "./sim/collision.ts";
 export {
   World,
   DEFAULT_ARENA,

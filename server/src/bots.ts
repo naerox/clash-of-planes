@@ -92,7 +92,8 @@ export class BotManager {
         codec: jsonCodec,
         shipId: null,
         send: () => true,
-        deliver: () => 0, // a bot reads the world itself; nobody encodes a snapshot for it
+        deliver: () => 0,
+        wantsSnapshots: false, // a bot reads the world itself; nobody builds or encodes a snapshot for it
         deliverControl() {},
         kick: () => this.remove(room, id),
       };

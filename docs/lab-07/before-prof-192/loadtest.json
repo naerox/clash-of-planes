@@ -1,0 +1,22 @@
+{
+  "seconds": 20,
+  "procs": 3,
+  "points": [
+    {
+      "mode": "room",
+      "n": 192,
+      "joined": 192,
+      "matches": 1,
+      "tickMeanMs": 18.1,
+      "tickP99Ms": 31.16,
+      "tickMaxMs": 41.38,
+      "latenessP99Ms": 5.54,
+      "tickBusyPct": 54.31,
+      "eventLoopUtilizationPct": 82.75,
+      "rssMB": 155.18,
+      "heapMB": 35,
+      "kbPerSecOut": 27099.89,
+      "skippedTicks": 0
+    }
+  ]
+}

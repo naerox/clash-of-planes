@@ -19,6 +19,9 @@
 import {
   STEP_MS,
   ARENA,
+  newAsteroid,
+  newBullet,
+  newShip,
   lerp,
   angleDelta,
   wrappedDelta,
@@ -49,7 +52,12 @@ export interface RemoteScene {
 
 export class SnapshotBuffer {
   #snapshots: SnapshotMessage[] = [];
-  #offsets: number[] = [];
+  /** arrival − tick·STEP of the last `offsetWindow` snapshots, as a ring (no `shift()`, no spread). */
+  readonly #offsets: Float64Array;
+  #offsetNext = 0;
+  #offsetCount = 0;
+  #offsetMin = 0;
+  readonly #onEvict: ((snapshot: SnapshotMessage) => void) | undefined;
   readonly capacity: number;
   readonly offsetWindow: number;
   readonly stepMs: number;
@@ -59,13 +67,25 @@ export class SnapshotBuffer {
   lastArrival: number | null = null;
 
   constructor({
-    capacity = 90,
+    // 20 snapshots = two thirds of a second: far more than the 100–300 ms the interpolation looks
+    // back. (It was 90 = three seconds, which kept ~3000 records alive long enough to be promoted
+    // to the old generation, and that is what a major GC every few seconds was made of.)
+    capacity = 20,
     offsetWindow = 90,
     stepMs = STEP_MS,
-  }: { capacity?: number; offsetWindow?: number; stepMs?: number } = {}) {
+    onEvict,
+  }: {
+    capacity?: number;
+    offsetWindow?: number;
+    stepMs?: number;
+    /** Called with every snapshot the buffer lets go of, so its records can be recycled. */
+    onEvict?: (snapshot: SnapshotMessage) => void;
+  } = {}) {
     this.capacity = capacity;
     this.offsetWindow = offsetWindow;
     this.stepMs = stepMs;
+    this.#offsets = new Float64Array(offsetWindow);
+    this.#onEvict = onEvict;
   }
 
   get latest(): SnapshotMessage | null {
@@ -85,10 +105,20 @@ export class SnapshotBuffer {
     }
     if (newest) this.gaps += snapshot.tick - newest.tick - 1;
     this.#snapshots.push(snapshot);
-    if (this.#snapshots.length > this.capacity) this.#snapshots.shift();
+    if (this.#snapshots.length > this.capacity) {
+      const oldest = this.#snapshots.shift();
+      if (oldest) this.#onEvict?.(oldest);
+    }
 
-    this.#offsets.push(arrivalMs - snapshot.tick * this.stepMs);
-    if (this.#offsets.length > this.offsetWindow) this.#offsets.shift();
+    this.#offsets[this.#offsetNext] = arrivalMs - snapshot.tick * this.stepMs;
+    this.#offsetNext = (this.#offsetNext + 1) % this.offsetWindow;
+    if (this.#offsetCount < this.offsetWindow) this.#offsetCount++;
+    let min = Infinity;
+    for (let i = 0; i < this.#offsetCount; i++) {
+      const o = this.#offsets[i] ?? Infinity;
+      if (o < min) min = o;
+    }
+    this.#offsetMin = min; // it only changes when a sample is added, so it is computed here, once
     this.accepted++;
     this.lastArrival = arrivalMs;
     return true;
@@ -96,7 +126,7 @@ export class SnapshotBuffer {
 
   /** server-clock − client-clock, in ms: arrival ≈ tick·STEP + offset */
   get offsetMs(): number {
-    return this.#offsets.length ? Math.min(...this.#offsets) : 0;
+    return this.#offsetCount ? this.#offsetMin : 0;
   }
 
   /** The (fractional) server tick that should be on screen at client time `nowMs`. */
@@ -146,56 +176,183 @@ function teleported(from: Positioned, to: Positioned, ticks: number, wraps: bool
   return Math.hypot(dx, dy) > (fastest * ticks) / 30 + 60;
 }
 
-function blend<E extends Positioned>(
-  listA: readonly E[],
-  listB: readonly E[],
-  t: number,
-  ticks: number,
-  wraps: boolean,
-  turn: (a: E, b: E, t: number) => Partial<E> = () => ({}),
-): E[] {
-  const byId = new Map(listB.map((e) => [e.id, e]));
-  const out: E[] = [];
-  for (const a of listA) {
-    const b = byId.get(a.id);
-    // present in A, gone in B: it died/expired somewhere in this interval — keep it where it was
-    // until the render time passes B (then it is simply no longer in the list)
-    if (!b) {
-      out.push(a);
-      continue;
-    }
-    if (teleported(a, b, ticks, wraps)) {
-      out.push(t < 0.5 ? a : b);
-      continue;
-    }
-    out.push({
-      ...b,
-      x: wraps ? lerpWrapped(a.x, b.x, t, ARENA.width) : lerp(a.x, b.x, t),
-      y: wraps ? lerpWrapped(a.y, b.y, t, ARENA.height) : lerp(a.y, b.y, t),
-      ...turn(a, b, t),
-    });
+/**
+ * Where `interpolateRemote` writes. The records and the arrays are created once and rewritten
+ * every frame: at 60 fps the old version built 20–40 fresh objects (a `{ ...b }` per entity, an
+ * array per kind, a `Map` per kind) 60 times a second, and the allocation profile ranked it
+ * among the top allocators. Valid until the next call.
+ */
+export class RemoteScratch implements RemoteScene {
+  readonly ships: ShipSnap[] = [];
+  readonly bullets: BulletSnap[] = [];
+  readonly asteroids: AsteroidSnap[] = [];
+  pickups: readonly PickupSnap[] = [];
+
+  readonly #shipRecs: ShipSnap[] = [];
+  readonly #bulletRecs: BulletSnap[] = [];
+  readonly #asteroidRecs: AsteroidSnap[] = [];
+  readonly #lookup = new Map<EntityId, number>(); // id → index in list B; cleared and refilled, never rebuilt
+
+  /** The held state of snapshot `a`: lists are shared, not copied (starved: nothing newer to blend toward). */
+  hold(a: SnapshotMessage): this {
+    this.pickups = a.pickups;
+    copyList(a.ships, this.ships, this.#shipRecs, newShip, copyShip);
+    copyList(a.bullets, this.bullets, this.#bulletRecs, newBullet, copyBullet);
+    copyList(a.asteroids, this.asteroids, this.#asteroidRecs, newAsteroid, copyAsteroid);
+    return this;
   }
-  // present in B only: it has not been "born" yet at this render time — it appears when the
-  // render time reaches B, where it becomes part of the next interval's A list
-  return out;
+
+  blend(a: SnapshotMessage, b: SnapshotMessage, t: number): this {
+    const ticks = b.tick - a.tick;
+    this.pickups = a.pickups; // they never move; one that appears or vanishes does so at a snapshot
+    this.#blendShips(a.ships, b.ships, t, ticks);
+    this.#blendBullets(a.bullets, b.bullets, t, ticks);
+    this.#blendAsteroids(a.asteroids, b.asteroids, t, ticks);
+    return this;
+  }
+
+  #index(listB: readonly Positioned[]): Map<EntityId, number> {
+    this.#lookup.clear();
+    for (let i = 0; i < listB.length; i++) {
+      const e = listB[i];
+      if (e) this.#lookup.set(e.id, i);
+    }
+    return this.#lookup;
+  }
+
+  #blendShips(
+    listA: readonly ShipSnap[],
+    listB: readonly ShipSnap[],
+    t: number,
+    ticks: number,
+  ): void {
+    const index = this.#index(listB);
+    let n = 0;
+    for (let i = 0; i < listA.length; i++) {
+      const a = listA[i];
+      if (!a) continue;
+      const rec = this.#shipRecs[n] ?? (this.#shipRecs[n] = newShip());
+      const j = index.get(a.id);
+      const b = j === undefined ? undefined : listB[j];
+      if (!b)
+        copyShip(rec, a); // gone in B: keep it where it was until the render time passes B
+      else if (teleported(a, b, ticks, true)) copyShip(rec, t < 0.5 ? a : b);
+      else {
+        copyShip(rec, b);
+        rec.x = lerpWrapped(a.x, b.x, t, ARENA.width);
+        rec.y = lerpWrapped(a.y, b.y, t, ARENA.height);
+        rec.angle = lerpAngle(a.angle, b.angle, t);
+      }
+      this.ships[n++] = rec;
+    }
+    this.ships.length = n;
+  }
+
+  #blendBullets(
+    listA: readonly BulletSnap[],
+    listB: readonly BulletSnap[],
+    t: number,
+    ticks: number,
+  ): void {
+    const index = this.#index(listB);
+    let n = 0;
+    for (let i = 0; i < listA.length; i++) {
+      const a = listA[i];
+      if (!a) continue;
+      const rec = this.#bulletRecs[n] ?? (this.#bulletRecs[n] = newBullet());
+      const j = index.get(a.id);
+      const b = j === undefined ? undefined : listB[j];
+      if (!b) copyBullet(rec, a);
+      else if (teleported(a, b, ticks, false)) copyBullet(rec, t < 0.5 ? a : b);
+      else {
+        copyBullet(rec, b);
+        rec.x = lerp(a.x, b.x, t);
+        rec.y = lerp(a.y, b.y, t);
+      }
+      this.bullets[n++] = rec;
+    }
+    this.bullets.length = n;
+  }
+
+  #blendAsteroids(
+    listA: readonly AsteroidSnap[],
+    listB: readonly AsteroidSnap[],
+    t: number,
+    ticks: number,
+  ): void {
+    const index = this.#index(listB);
+    let n = 0;
+    for (let i = 0; i < listA.length; i++) {
+      const a = listA[i];
+      if (!a) continue;
+      const rec = this.#asteroidRecs[n] ?? (this.#asteroidRecs[n] = newAsteroid());
+      const j = index.get(a.id);
+      const b = j === undefined ? undefined : listB[j];
+      if (!b) copyAsteroid(rec, a);
+      else if (teleported(a, b, ticks, false)) copyAsteroid(rec, t < 0.5 ? a : b);
+      else {
+        copyAsteroid(rec, b);
+        rec.x = lerp(a.x, b.x, t);
+        rec.y = lerp(a.y, b.y, t);
+        rec.angle = lerpAngle(a.angle, b.angle, t);
+      }
+      this.asteroids[n++] = rec;
+    }
+    this.asteroids.length = n;
+  }
+}
+
+function copyList<E>(
+  from: readonly E[],
+  into: E[],
+  recs: E[],
+  make: () => E,
+  copy: (dst: E, src: E) => void,
+): void {
+  for (let i = 0; i < from.length; i++) {
+    const src = from[i];
+    if (!src) continue;
+    const rec = recs[i] ?? (recs[i] = make());
+    copy(rec, src);
+    into[i] = rec;
+  }
+  into.length = from.length;
+}
+
+function copyShip(d: ShipSnap, s: ShipSnap): void {
+  d.id = s.id;
+  d.x = s.x;
+  d.y = s.y;
+  d.angle = s.angle;
+  d.hp = s.hp;
+  d.thrusting = s.thrusting;
+  d.dead = s.dead;
+  d.rapid = s.rapid;
+  d.score = s.score;
+}
+function copyBullet(d: BulletSnap, s: BulletSnap): void {
+  d.id = s.id;
+  d.owner = s.owner;
+  d.x = s.x;
+  d.y = s.y;
+  d.seq = s.seq;
+}
+function copyAsteroid(d: AsteroidSnap, s: AsteroidSnap): void {
+  d.id = s.id;
+  d.x = s.x;
+  d.y = s.y;
+  d.angle = s.angle;
+  d.radius = s.radius;
+  d.hunter = s.hunter;
 }
 
 /**
- * The remote part of the scene at one render instant.
+ * The remote part of the scene at one render instant. Returns `out` (rewritten), or — when no
+ * `out` is given, as in the tests — a fresh scratch.
  */
-export function interpolateRemote({ a, b, t }: Pick<Sample, "a" | "b" | "t">): RemoteScene {
-  if (!b) {
-    return { ships: a.ships, bullets: a.bullets, asteroids: a.asteroids, pickups: a.pickups };
-  }
-  const ticks = b.tick - a.tick;
-  return {
-    ships: blend(a.ships, b.ships, t, ticks, true, (p, q, k) => ({
-      angle: lerpAngle(p.angle, q.angle, k),
-    })),
-    bullets: blend(a.bullets, b.bullets, t, ticks, false),
-    asteroids: blend(a.asteroids, b.asteroids, t, ticks, false, (p, q, k) => ({
-      angle: lerpAngle(p.angle, q.angle, k),
-    })),
-    pickups: a.pickups, // they never move; one that appears or vanishes does so at a snapshot
-  };
+export function interpolateRemote(
+  { a, b, t }: Pick<Sample, "a" | "b" | "t">,
+  out: RemoteScratch = new RemoteScratch(),
+): RemoteScene {
+  return b ? out.blend(a, b, t) : out.hold(a);
 }

@@ -34,7 +34,23 @@ const COLORS = {
 };
 
 const GRID = 100;
-const FRAME_BUDGET_MS = 1000 / 60;
+
+// Constants the draw functions would otherwise rebuild on every call (an array literal, a template
+// string): hoisted, so a frame allocates none of them.
+const WRAP_X = [-ARENA.width, 0, ARENA.width];
+const WRAP_Y = [-ARENA.height, 0, ARENA.height];
+const ASTEROID_FRAMES = ["asteroid_0", "asteroid_1", "asteroid_2"];
+
+let nameFontScale = Number.NaN;
+let nameFontString = "";
+/** The pilot-name font for this canvas scale — rebuilt only when the window is resized. */
+function nameFont(scale: number): string {
+  if (scale !== nameFontScale) {
+    nameFontScale = scale;
+    nameFontString = `${Math.round(13 / scale)}px ui-monospace, Menlo, Consolas, monospace`;
+  }
+  return nameFontString;
+}
 
 export function drawBackground(view: View): void {
   const { ctx } = view;
@@ -109,14 +125,18 @@ export function drawShip(view: View, ship: DrawShip): void {
   ctx.rect(0, 0, ARENA.width, ARENA.height);
   ctx.clip();
 
-  for (const dx of [-ARENA.width, 0, ARENA.width]) {
-    for (const dy of [-ARENA.height, 0, ARENA.height]) {
+  for (const dx of WRAP_X) {
+    for (const dy of WRAP_Y) {
       const x = ship.x + dx;
       const y = ship.y + dy;
       if (x < -30 || x > ARENA.width + 30 || y < -30 || y > ARENA.height + 30) continue;
       if (view.sprites) {
-        const frame = ship.thrusting ? `ship_thrust_${flicker > 0.75 ? 0 : 1}` : "ship";
-        view.sprites.draw(ctx, frame, x, y, { angle: ship.angle, radius: SHIP_PARAMS.radius });
+        const frame = ship.thrusting
+          ? flicker > 0.75
+            ? "ship_thrust_0"
+            : "ship_thrust_1"
+          : "ship";
+        view.sprites.draw(ctx, frame, x, y, ship.angle, SHIP_PARAMS.radius);
       } else {
         ctx.save();
         ctx.translate(x, y);
@@ -129,7 +149,7 @@ export function drawShip(view: View, ship: DrawShip): void {
   ctx.restore();
 
   // the pilot's name, above the ship (upright, whatever the heading)
-  ctx.font = `${Math.round(13 / view.scale)}px ui-monospace, Menlo, Consolas, monospace`;
+  ctx.font = nameFont(view.scale);
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
   ctx.fillStyle = ship.isMe ? COLORS.hpFull : COLORS.hud;
@@ -141,9 +161,11 @@ export function drawBullets(view: View, bullets: readonly DrawBullet[]): void {
   const { ctx } = view;
   beginWorld(view);
   ctx.fillStyle = COLORS.bullet;
-  for (const b of bullets) {
+  for (let i = 0; i < bullets.length; i++) {
+    const b = bullets[i];
+    if (!b) continue;
     if (view.sprites) {
-      view.sprites.draw(ctx, "bullet", b.x, b.y, { radius: BULLET_PARAMS.radius });
+      view.sprites.draw(ctx, "bullet", b.x, b.y, 0, BULLET_PARAMS.radius);
       continue;
     }
     ctx.beginPath();
@@ -155,10 +177,12 @@ export function drawBullets(view: View, bullets: readonly DrawBullet[]): void {
 export function drawAsteroids(view: View, asteroids: readonly AsteroidSnap[]): void {
   const { ctx } = view;
   beginWorld(view);
-  for (const a of asteroids) {
+  for (let i = 0; i < asteroids.length; i++) {
+    const a = asteroids[i];
+    if (!a) continue;
     if (view.sprites) {
-      const frame = a.hunter ? "asteroid_hunter" : `asteroid_${a.id % 3}`;
-      view.sprites.draw(ctx, frame, a.x, a.y, { angle: a.angle, radius: a.radius });
+      const frame = a.hunter ? "asteroid_hunter" : (ASTEROID_FRAMES[a.id % 3] ?? "asteroid_0");
+      view.sprites.draw(ctx, frame, a.x, a.y, a.angle, a.radius);
       continue;
     }
     ctx.save();
@@ -187,7 +211,9 @@ export function drawAsteroids(view: View, asteroids: readonly AsteroidSnap[]): v
 export function drawParticles(view: View, particles: readonly DrawParticle[]): void {
   const { ctx } = view;
   beginWorld(view);
-  for (const p of particles) {
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    if (!p) continue;
     ctx.globalAlpha = Math.max(0, p.life);
     ctx.fillStyle = COLORS.particle;
     ctx.beginPath();
@@ -201,11 +227,18 @@ export function drawPickups(view: View, pickups: readonly PickupSnap[]): void {
   const { ctx } = view;
   beginWorld(view);
   const pulse = 1 + 0.15 * Math.sin(performance.now() / 200);
-  for (const pk of pickups) {
+  for (let i = 0; i < pickups.length; i++) {
+    const pk = pickups[i];
+    if (!pk) continue;
     if (view.sprites) {
-      view.sprites.draw(ctx, `pickup_${pk.variant}`, pk.x, pk.y, {
-        radius: PICKUP_PARAMS.radius * pulse,
-      });
+      view.sprites.draw(
+        ctx,
+        pk.variant === "shield" ? "pickup_shield" : "pickup_rapid",
+        pk.x,
+        pk.y,
+        0,
+        PICKUP_PARAMS.radius * pulse,
+      );
       continue;
     }
     ctx.fillStyle = pk.variant === "shield" ? COLORS.pickupShield : COLORS.pickupRapid;
@@ -218,26 +251,30 @@ export function drawPickups(view: View, pickups: readonly PickupSnap[]): void {
   }
 }
 
+const hudRows: string[] = [];
+let hudStamp = -Infinity;
+
 export function drawHud(view: View, stats: LoopStats, lines: readonly string[] = []): void {
   const { ctx } = view;
   beginScreen(view);
   ctx.font = '13px ui-monospace, "SF Mono", Menlo, Consolas, monospace';
   ctx.textBaseline = "top";
 
-  const rows = [
-    `steps/s   ${stats.stepsPerSec.toFixed(0)}`,
-    `frames/s  ${stats.framesPerSec.toFixed(0)}`,
-    `frame     ${stats.frameMs.toFixed(2)} ms`,
-    ...lines,
-  ];
+  // the numbers change a few times a second at most: format them at 4 Hz, not at 60
+  const now = performance.now();
+  if (now - hudStamp >= 250) {
+    hudStamp = now;
+    hudRows.length = 0;
+    hudRows.push(
+      `steps/s   ${stats.stepsPerSec.toFixed(0)}`,
+      `frames/s  ${stats.framesPerSec.toFixed(0)}`,
+      `frame     ${stats.frameMs.toFixed(2)} ms`,
+      ...lines,
+    );
+  }
 
-  rows.forEach((text, i) => {
-    ctx.fillStyle =
-      text.startsWith("delta") && stats.deltaMs > FRAME_BUDGET_MS * 1.5
-        ? COLORS.hudWarn
-        : COLORS.hud;
-    ctx.fillText(text, 12, 10 + i * 17);
-  });
+  ctx.fillStyle = COLORS.hud;
+  for (let i = 0; i < hudRows.length; i++) ctx.fillText(hudRows[i] ?? "", 12, 10 + i * 17);
 
   ctx.fillStyle = COLORS.hud;
   ctx.textBaseline = "bottom";
@@ -265,6 +302,9 @@ export function drawEventFeed(view: View, entries: readonly FeedEntry[]): void {
 }
 
 /** Ship HP bar + score of the LOCAL player. `me` comes from the scene: { hp, score, dead, respawn, rapid }. */
+let scoreShown = Number.NaN;
+let scoreText = "";
+
 export function drawShipStatus(view: View, me: DrawShip | null): void {
   if (!me) return;
   const { ctx } = view;
@@ -278,7 +318,11 @@ export function drawShipStatus(view: View, me: DrawShip | null): void {
   ctx.font = '13px ui-monospace, "SF Mono", Menlo, Consolas, monospace';
   ctx.fillStyle = COLORS.hud;
   ctx.textAlign = "right";
-  ctx.fillText(`score ${me.score}`, x + barW, y - 2);
+  if (me.score !== scoreShown) {
+    scoreShown = me.score;
+    scoreText = `score ${me.score}`;
+  }
+  ctx.fillText(scoreText, x + barW, y - 2);
   ctx.textAlign = "left";
 
   ctx.fillStyle = "#1a2c3a";

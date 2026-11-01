@@ -13,7 +13,7 @@ const rules = {
 };
 
 export default [
-  { ignores: ["**/dist", "**/node_modules", "logs"] },
+  { ignores: ["**/dist", "**/dist-readable", "experiments", "**/node_modules", "logs"] },
   js.configs.recommended,
   // Type-checked rules: they read the real types, so they catch what a syntax-only linter cannot —
   // a floating promise, an `await` of a non-promise, an unsafe `any` flowing in from a library.

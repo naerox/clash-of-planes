@@ -47,6 +47,14 @@ export interface Player {
   send(message: ControlFrame, options?: SendOptions): boolean;
   /** A snapshot, encoded in this connection's codec. Returns the encoded size in bytes. */
   deliver(snapshot: SnapshotMessage): number;
+  /**
+   * A snapshot that is already encoded (binary connections only): the match encodes the part
+   * every client shares once per tick and hands each client its own frame. Players without it
+   * (tests, JSON clients) get `deliver(snapshot)` as before. Returns the size in bytes.
+   */
+  deliverFrame?(frame: Uint8Array): number;
+  /** `false` = nothing is sent to this player (a bot reads the world itself): no snapshot is built for it. */
+  readonly wantsSnapshots?: boolean;
   /** A pong (or any other codec-level game message). */
   deliverControl(message: GameMessage): void;
   /** Cut this player off (a flood, say). */

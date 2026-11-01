@@ -1,4 +1,5 @@
 import type { CodecName, GameMessage } from "../protocol.ts";
+import type { SnapshotRecycler } from "./recycler.ts";
 
 /**
  * What a codec is: a pair of functions between a logical `GameMessage` and a wire frame.
@@ -24,6 +25,8 @@ export interface JsonCodec extends Codec<string> {
 export interface BinaryCodec extends Codec<Uint8Array, ArrayBuffer | Uint8Array> {
   readonly name: "binary";
   readonly binary: true;
+  /** With a `recycler`, a snapshot is built from recycled records instead of fresh objects. */
+  decode(data: ArrayBuffer | Uint8Array, recycler?: SnapshotRecycler): GameMessage;
 }
 
 /** Either implementation; `codec.binary` tells which. */

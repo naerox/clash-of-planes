@@ -1,6 +1,13 @@
 import { test } from "vitest";
+import fc from "fast-check";
 import assert from "node:assert/strict";
-import { circlesOverlap, findCollisions } from "../../src/sim/collision.ts";
+import {
+  HASH_MIN_ENTITIES,
+  circlesOverlap,
+  findCollisions,
+  findCollisionsHashed,
+  findCollisionsNaive,
+} from "../../src/sim/collision.ts";
 import { World } from "../../src/sim/world.ts";
 import { Bullet } from "../../src/sim/bullet.ts";
 import { Asteroid } from "../../src/sim/asteroid.ts";
@@ -42,4 +49,53 @@ test("findCollisions reports a bullet overlapping a non-owner asteroid", () => {
   w.spawn(new Asteroid(new Vector2(0, 0), Vector2.zero, 20));
   w.spawn(new Bullet(new Vector2(0, 0), Vector2.zero, owner, { ttl: 5, radius: 2, damage: 1 }));
   assert.equal([...findCollisions(w)].length, 1);
+});
+
+// ── Lab 7: the spatial hash must find exactly the pairs the naive loop finds, in the same order ──
+
+import { ARENA } from "../../src/sim/arena.ts";
+import { seq } from "../../src/index.ts";
+
+function crowded(seed: number, ships: number, spread: number) {
+  const w = new World({ seed, arena: { asteroids: 12, asteroidSpeed: [40, 80] } }).populate();
+  const made = Array.from({ length: ships }, (_, i) => w.addShip(`s${i}`));
+  made.forEach((s, i) => s.fire(w, seq(i + 1)));
+  const rnd = (n: number) => {
+    // a tiny deterministic generator, independent of the world's own
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return (seed / 0x7fffffff) * n;
+  };
+  // squeeze everything into a `spread`-sized patch (half of them across the wrap seam)
+  for (const e of w) {
+    const x = rnd(spread) - spread / 2;
+    const y = rnd(spread) - spread / 2;
+    e.pos = new Vector2((x + ARENA.width) % ARENA.width, (y + ARENA.height) % ARENA.height);
+  }
+  return [...w].filter((e) => e.alive);
+}
+
+test("spatial hash: same pairs, same order as the naive loop (random crowded worlds, wrap seam included)", () => {
+  fc.assert(
+    fc.property(
+      fc.integer({ min: 1, max: 100_000 }),
+      fc.integer({ min: 0, max: 60 }),
+      fc.integer({ min: 40, max: 1600 }),
+      (seed, ships, spread) => {
+        const entities = crowded(seed, ships, spread);
+        const naive = [...findCollisionsNaive(entities)];
+        const hashed = [...findCollisionsHashed(entities)];
+        return (
+          naive.length === hashed.length &&
+          naive.every(([a, b], i) => hashed[i]?.[0] === a && hashed[i]?.[1] === b)
+        );
+      },
+    ),
+    { numRuns: 150 },
+  );
+});
+
+test("spatial hash: the crowded fixtures really contain collisions (the comparison is not vacuous)", () => {
+  const entities = crowded(5, 40, 120);
+  assert.ok([...findCollisionsNaive(entities)].length > 5);
+  assert.ok(entities.length >= HASH_MIN_ENTITIES);
 });

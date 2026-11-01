@@ -14,11 +14,13 @@ import {
   STEP,
   STEP_MS,
   TICK_ZERO,
+  SnapshotFanout,
   World,
   buildSnapshot,
   type InputMessage,
   type Seq,
   type Ship,
+  type SimEvent,
   type Tick,
 } from "@dogfight/shared";
 import type { Logger } from "./logger.ts";
@@ -268,9 +270,28 @@ export class Match {
     const events = this.world.drainEvents();
     for (const { type, ...data } of events) this.room.record(type, data); // the match log (Lab 4)
 
+    this.#broadcast(events);
+  }
+
+  /**
+   * Snapshots for everyone. The world part (all ships, bullets, asteroids, pickups, events) is the
+   * same for every client, so for binary clients it is built and encoded once (`SnapshotFanout`);
+   * a JSON client, or a test double without `deliverFrame`, still gets its own snapshot object.
+   */
+  #broadcast(events: SimEvent[]): void {
+    let fanout: SnapshotFanout | null = null;
     for (const st of this.players.values()) {
-      const snapshot = buildSnapshot(this.world, { shipId: st.ship.id, ack: st.lastSeq, events });
-      const bytes = st.player.deliver(snapshot);
+      const { player, ship } = st;
+      if (player.wantsSnapshots === false) continue;
+      let bytes: number;
+      if (player.deliverFrame && player.codec.binary) {
+        fanout ??= new SnapshotFanout(buildSnapshot(this.world, { events }));
+        bytes = player.deliverFrame(fanout.frame(ship.toState(), st.lastSeq));
+      } else {
+        bytes = player.deliver(
+          buildSnapshot(this.world, { shipId: ship.id, ack: st.lastSeq, events }),
+        );
+      }
       this.stats.bytesOut += bytes;
     }
   }

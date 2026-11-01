@@ -111,7 +111,9 @@ export class Predictor {
   }
 
   #advanceBullets(): void {
-    for (const { bullet } of this.bullets) {
+    for (let i = 0; i < this.bullets.length; i++) {
+      const bullet = this.bullets[i]?.bullet;
+      if (!bullet) continue;
       bullet.prevPos = bullet.pos;
       bullet.update(STEP);
     }
@@ -130,7 +132,10 @@ export class Predictor {
     this.pending = this.pending.filter((input) => input.seq > ack);
     this.ship.prevPos = this.ship.pos; // if there is nothing to replay, we are exactly here
     this.ship.prevAngle = this.ship.angle;
-    for (const input of this.pending) this.#apply(input, false); // replay
+    for (let i = 0; i < this.pending.length; i++) {
+      const input = this.pending[i];
+      if (input) this.#apply(input, false); // replay
+    }
 
     const after = this.ship.pos;
     const dx = wrappedDelta(after.x, before.x, ARENA.width);
@@ -157,10 +162,8 @@ export class Predictor {
    *   - the server has already processed its input (seq ≤ ack) and made no bullet (cooldown, dead).
    */
   #matchBullets(shipId: EntityId, ack: Seq, serverBullets: readonly BulletSnap[]): void {
-    const mine = new Map<ShotSeq, BulletSnap>();
-    for (const b of serverBullets) if (b.owner === shipId) mine.set(b.seq, b);
     for (const predicted of this.bullets) {
-      const server = mine.get(shotSeq(predicted.bullet.seq));
+      const server = findOwn(serverBullets, shipId, shotSeq(predicted.bullet.seq));
       if (server) {
         predicted.confirmed = true;
         predicted.id = server.id;
@@ -205,7 +208,10 @@ export class Predictor {
   }
 
   /** Where to draw the ship: the interpolated pose between the last two steps, plus the fading offset. */
-  visual(alpha: number): { x: number; y: number; angle: number } {
+  visual(
+    alpha: number,
+    out: { x: number; y: number; angle: number } = { x: 0, y: 0, angle: 0 },
+  ): { x: number; y: number; angle: number } {
     const { ship } = this;
     const prev = ship.prevPos;
     const x = prev.x + wrappedDelta(prev.x, ship.pos.x, ARENA.width) * alpha + this.offset.x;
@@ -213,6 +219,22 @@ export class Predictor {
     const pa = ship.prevAngle;
     let da = ship.angle - pa;
     da -= Math.PI * 2 * Math.round(da / (Math.PI * 2));
-    return { x: wrap(x, ARENA.width), y: wrap(y, ARENA.height), angle: pa + da * alpha };
+    out.x = wrap(x, ARENA.width);
+    out.y = wrap(y, ARENA.height);
+    out.angle = pa + da * alpha;
+    return out;
   }
+}
+
+/** The server's copy of one of our bullets. A linear scan: there are a handful, and a `Map` per snapshot is not free. */
+function findOwn(
+  bullets: readonly BulletSnap[],
+  owner: EntityId,
+  seq: ShotSeq,
+): BulletSnap | undefined {
+  for (let i = 0; i < bullets.length; i++) {
+    const b = bullets[i];
+    if (b && b.owner === owner && b.seq === seq) return b;
+  }
+  return undefined;
 }

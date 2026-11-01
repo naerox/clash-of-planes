@@ -1,0 +1,91 @@
+{
+  "label": "before-server",
+  "seconds": 40,
+  "players": 9,
+  "entities": 32,
+  "tickMs": {
+    "p50": 0.656,
+    "meanOfMeans": 0.688,
+    "p99Median": 2.441,
+    "p99Worst": 2.586,
+    "max": 7.327
+  },
+  "overruns": 0,
+  "top": [
+    {
+      "fn": "(idle) :0",
+      "ms": 44700,
+      "pct": 97
+    },
+    {
+      "fn": "writev :0",
+      "ms": 240,
+      "pct": 0.5
+    },
+    {
+      "fn": "(garbage collector) :0",
+      "ms": 68,
+      "pct": 0.1
+    },
+    {
+      "fn": "(program) :0",
+      "ms": 65,
+      "pct": 0.1
+    },
+    {
+      "fn": "buildSnapshot snapshot.ts:19",
+      "ms": 44,
+      "pct": 0.1
+    },
+    {
+      "fn": "encode json.ts:14",
+      "ms": 42,
+      "pct": 0.1
+    },
+    {
+      "fn": "writeBuffer :0",
+      "ms": 31,
+      "pct": 0.1
+    },
+    {
+      "fn": "compileSourceTextModule utils:344",
+      "ms": 26,
+      "pct": 0.1
+    },
+    {
+      "fn": "nextTick task_queues:113",
+      "ms": 24,
+      "pct": 0.1
+    },
+    {
+      "fn": "send sender.js:354",
+      "ms": 22,
+      "pct": 0
+    },
+    {
+      "fn": "step match.ts:252",
+      "ms": 22,
+      "pct": 0
+    },
+    {
+      "fn": "writevGeneric stream_base_commons:121",
+      "ms": 21,
+      "pct": 0
+    },
+    {
+      "fn": "compileForInternalLoader realm:385",
+      "ms": 20,
+      "pct": 0
+    },
+    {
+      "fn": "__require index:8",
+      "ms": 19,
+      "pct": 0
+    },
+    {
+      "fn": "utf8Length protocol.ts:77",
+      "ms": 15,
+      "pct": 0
+    }
+  ]
+}

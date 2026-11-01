@@ -4,6 +4,7 @@
 import { createReadStream } from "node:fs";
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
 import { readFile, stat } from "node:fs/promises";
+import { performance as nodePerformance } from "node:perf_hooks";
 import { pipeline } from "node:stream/promises";
 import { MIME, PathError, safeRelativePath, serveStatic } from "./static.ts";
 import { listReplays, replayPath } from "./log/replay.ts";
@@ -160,10 +161,17 @@ export function createRequestListener({ config, rooms, bots, log }: HttpDeps): R
     }
 
     if (pathname === "/api/stats" && method === "GET") {
+      const elu = nodePerformance.eventLoopUtilization();
       return sendJson(res, 200, {
         tickRate: TICK_RATE,
         uptime: Math.round(process.uptime()),
         rssBytes: process.memoryUsage.rss(),
+        heapUsedBytes: process.memoryUsage().heapUsed,
+        // cumulative since start; the difference of two samples over their interval is the utilization
+        eventLoop: {
+          idleMs: Math.round(elu.idle),
+          activeMs: Math.round(elu.active),
+        },
         netsim: config.netsim,
         matches: rooms
           .list()

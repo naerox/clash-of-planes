@@ -1,0 +1,4 @@
+ships | frame bytes | main thread µs/snapshot: decode inline | via worker | verdict
+    9 |         418 |      7.2 |     12.1 | worker loses
+   64 |        1312 |     21.2 |     22.6 | worker loses
+  128 |        2336 |     19.0 |     50.8 | worker loses

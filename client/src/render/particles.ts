@@ -9,7 +9,9 @@ interface Particle {
   vy: number;
   radius: number;
   ttl: number;
-  readonly maxTtl: number;
+  maxTtl: number;
+  /** 1 → 0, kept up to date by `update` so drawing needs no object of its own. */
+  life: number;
 }
 
 /** What drawParticles wants: position, radius and `life` 1 → 0. */
@@ -20,48 +22,61 @@ export interface DrawParticle {
   readonly life: number;
 }
 
+const blank = (): Particle => ({ x: 0, y: 0, vx: 0, vy: 0, radius: 0, ttl: 0, maxTtl: 1, life: 1 });
+
+/**
+ * A pool: sparks are recycled instead of allocated. A dead spark goes on the free list and the
+ * next burst rewrites it, so after the first few explosions nothing is created or collected.
+ * (Before: a new object per spark, a new array per frame from `filter`, and another from `map`.)
+ */
 export class ParticleSystem {
-  #particles: Particle[] = [];
+  readonly #live: Particle[] = [];
+  readonly #free: Particle[] = [];
 
   burst(x: number, y: number, count = 10, random: () => number = Math.random): void {
     for (let i = 0; i < count; i++) {
       const speed = 60 + random() * 180;
       const angle = random() * Math.PI * 2;
       const ttl = 0.3 + random() * 0.3;
-      this.#particles.push({
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        radius: 2 + random() * 2,
-        ttl,
-        maxTtl: ttl,
-      });
+      const p = this.#free.pop() ?? blank();
+      p.x = x;
+      p.y = y;
+      p.vx = Math.cos(angle) * speed;
+      p.vy = Math.sin(angle) * speed;
+      p.radius = 2 + random() * 2;
+      p.ttl = ttl;
+      p.maxTtl = ttl;
+      p.life = 1;
+      this.#live.push(p);
     }
   }
 
   update(dt: number): void {
-    for (const p of this.#particles) {
+    const live = this.#live;
+    const drag = Math.exp(-3 * dt);
+    for (let i = live.length - 1; i >= 0; i--) {
+      const p = live[i];
+      if (!p) continue;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      const drag = Math.exp(-3 * dt);
       p.vx *= drag;
       p.vy *= drag;
       p.ttl -= dt;
+      p.life = p.ttl / p.maxTtl;
+      if (p.ttl <= 0) {
+        const last = live.pop();
+        if (last && last !== p) live[i] = last; // swap-remove: order does not matter
+        this.#free.push(p);
+      }
     }
-    this.#particles = this.#particles.filter((p) => p.ttl > 0);
   }
 
-  get list(): DrawParticle[] {
-    return this.#particles.map((p) => ({
-      x: p.x,
-      y: p.y,
-      radius: p.radius,
-      life: p.ttl / p.maxTtl,
-    }));
+  /** The live sparks themselves (not a copy): read them, do not keep them. */
+  get list(): readonly DrawParticle[] {
+    return this.#live;
   }
 
   get size(): number {
-    return this.#particles.length;
+    return this.#live.length;
   }
 }

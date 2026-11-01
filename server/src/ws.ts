@@ -259,6 +259,12 @@ export function attachWebSocket({ server, rooms, config, log }: WsDeps) {
           state.net.out.send(() => send.raw(data, { critical: false }));
           return bytes;
         },
+        /** A frame the match encoded for us (see `Match.#broadcast`): the same path, minus the encoding. */
+        deliverFrame(data) {
+          state.stats.bytesOut += data.length;
+          state.net.out.send(() => send.raw(data, { critical: false }));
+          return data.length;
+        },
         /** Pongs: same path, same codec, but critical enough that we do not drop them for lag. */
         deliverControl(message) {
           const data = codec.encode(message);

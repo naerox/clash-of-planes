@@ -6,3 +6,5 @@ logs
 test-results
 playwright-report
 coverage
+dist-readable
+*.cpuprofile
