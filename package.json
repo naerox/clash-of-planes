@@ -1,22 +1,31 @@
 {
   "name": "dogfight",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "node --test \"src/**/*.test.js\"",
+    "dev": "concurrently -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm run dev -w server",
+    "dev:client": "npm run dev -w client",
+    "build": "npm run build -w client",
+    "start": "npm run start -w server",
+    "test": "npm test --workspaces",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "assets": "node scripts/gen-assets.js"
+    "assets": "npm run assets -w client"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "concurrently": "^9.0.0",
     "eslint": "^10.11.0",
     "globals": "^17.13.0",
-    "prettier": "^3.9.9",
-    "vite": "^8.3.2"
+    "prettier": "^3.9.9"
   }
 }

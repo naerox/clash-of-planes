@@ -1,0 +1,21 @@
+{
+  "logMB": 200,
+  "rateMBps": 2,
+  "seconds": 60,
+  "pipeline": {
+    "idleMB": 71,
+    "peakMB": 92,
+    "growthMB": 21,
+    "downloadedMB": 120
+  },
+  "naive": {
+    "idleMB": 92,
+    "peakMB": 281,
+    "growthMB": 188,
+    "downloadedMB": 120
+  },
+  "idleEndsAt": {
+    "pipeline": 2.0333951720000005,
+    "naive": 2.020776733999999
+  }
+}

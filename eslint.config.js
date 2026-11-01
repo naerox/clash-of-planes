@@ -1,22 +1,27 @@
 import js from "@eslint/js";
 import globals from "globals";
 
+const rules = { "no-var": "error", "prefer-const": "error", eqeqeq: "error" };
+
 export default [
-  { ignores: ["dist"] },
+  { ignores: ["**/dist", "**/node_modules", "logs"] },
   js.configs.recommended,
   {
-    files: ["src/**/*.js"],
+    // the browser client
+    files: ["client/src/**/*.js"],
     languageOptions: { sourceType: "module", globals: globals.browser },
-    rules: { "no-var": "error", "prefer-const": "error", eqeqeq: "error" },
+    rules,
   },
   {
-    // tests run in Node, not in the browser
-    files: ["src/**/*.test.js"],
-    languageOptions: { globals: globals.node },
-  },
-  {
-    // build scripts and the dev-server middleware run in Node
-    files: ["scripts/**/*.js", "server/**/*.js", "vite.config.js"],
+    // the Node server, its scripts and tests, plus build/dev tooling: all run in Node
+    files: [
+      "server/**/*.js",
+      "client/scripts/**/*.js",
+      "client/dev/**/*.js",
+      "client/vite.config.js",
+      "client/src/**/*.test.js",
+    ],
     languageOptions: { sourceType: "module", globals: globals.node },
+    rules,
   },
 ];
