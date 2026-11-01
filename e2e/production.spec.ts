@@ -4,6 +4,7 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { expect, test } from "@playwright/test";
+import { z } from "zod";
 
 test("the page is an installable PWA: manifest, icons, a registered service worker, no installability errors", async ({
   page,
@@ -12,11 +13,13 @@ test("the page is an installable PWA: manifest, icons, a registered service work
   await page.goto("/");
   const href = await page.locator('link[rel="manifest"]').getAttribute("href");
   expect(href).toBe("/manifest.webmanifest");
-  const manifest = (await (await request.get(href ?? "")).json()) as {
-    name: string;
-    display: string;
-    icons: { src: string; sizes: string }[];
-  };
+  const manifest = z
+    .object({
+      name: z.string(),
+      display: z.string(),
+      icons: z.array(z.object({ src: z.string(), sizes: z.string() })),
+    })
+    .parse(await (await request.get(href ?? "")).json());
   expect(manifest.name).toBe("Clash of Planes");
   expect(manifest.display).toBe("standalone");
   for (const icon of manifest.icons) expect((await request.get(icon.src)).status()).toBe(200);
