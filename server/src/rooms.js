@@ -20,6 +20,7 @@ export class RoomError extends Error {
  */
 export class Room extends EventEmitter {
   players = new Map(); // id → player, in join order
+  match = null; // the authoritative simulation for this room (match.js), set by the app
 
   constructor({ id, name, arena, maxPlayers, now = Date.now }) {
     super();
@@ -36,7 +37,7 @@ export class Room extends EventEmitter {
   }
 
   roster() {
-    return [...this.players.values()].map(({ id, name }) => ({ id, name }));
+    return [...this.players.values()].map(({ id, name, shipId }) => ({ id, name, shipId }));
   }
 
   info() {

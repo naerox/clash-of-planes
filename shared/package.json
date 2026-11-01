@@ -1,0 +1,13 @@
+{
+  "name": "@dogfight/shared",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Simulation, protocol and codecs used by BOTH the browser client and the Node server",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  }
+}

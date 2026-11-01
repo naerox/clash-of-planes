@@ -9,7 +9,10 @@
 // Events (all CustomEvents, payload in `detail`):
 //   "status"  { state, attempt, delayMs? }   every state change
 //   "message" { …parsed server message }     and the same detail under its own `type`
-//                                            ("joined", "roster", "chat", "error", …)
+//                                            ("joined", "roster", "chat", "error", …;
+//                                            in JSON mode also "snapshot" and "pong")
+//   "binary"  ArrayBuffer                    a binary frame (the binary codec's snapshots, pongs)
+//   "frame"   { size, binary }               every frame that arrived, for bandwidth statistics
 //   "closed"  { code, reason, fatal }        final: the connection will not come back
 //
 // `handshake()` returns the message that must open every connection (the `join`). It is sent
@@ -86,6 +89,19 @@ export class Connection extends EventTarget {
     return true;
   }
 
+  /**
+   * Sends right now or not at all — for the real-time stream (inputs, pings). Unlike `send`,
+   * it never queues: an input from five seconds ago is worse than no input, and replaying a
+   * backlog after a reconnect would be a burst the server would (rightly) throttle.
+   * `data` is a string or a Uint8Array. Returns whether it was handed to the socket.
+   */
+  sendNow(data) {
+    const socket = this.#socket;
+    if (this.#state !== "open" || socket?.readyState !== 1) return false;
+    socket.send(data);
+    return true;
+  }
+
   /** Leaving on purpose: no reconnect, the queue is discarded. */
   close(code = 1000, reason = "bye") {
     this.#intentional = true;
@@ -99,6 +115,7 @@ export class Connection extends EventTarget {
   #open(state) {
     this.#setState(state);
     const socket = new this.#WebSocket(this.#url);
+    socket.binaryType = "arraybuffer"; // binary frames arrive as ArrayBuffer, not Blob
     this.#socket = socket;
     let gotMessage = false;
 
@@ -125,6 +142,20 @@ export class Connection extends EventTarget {
 
     socket.addEventListener("message", (event) => {
       if (socket !== this.#socket) return;
+      if (typeof event.data !== "string") {
+        // a binary frame: the game plane of the binary codec — not parsed here
+        if (!gotMessage) {
+          gotMessage = true;
+          this.#attempt = 0;
+        }
+        const size = event.data.byteLength;
+        this.dispatchEvent(new CustomEvent("frame", { detail: { size, binary: true } }));
+        this.dispatchEvent(new CustomEvent("binary", { detail: event.data }));
+        return;
+      }
+      this.dispatchEvent(
+        new CustomEvent("frame", { detail: { size: event.data.length, binary: false } }),
+      );
       let message;
       try {
         message = JSON.parse(event.data);
@@ -173,6 +204,6 @@ export class Connection extends EventTarget {
   }
 }
 
-export function wsUrl(path = "/ws", loc = globalThis.location) {
-  return `${loc.protocol === "https:" ? "wss" : "ws"}://${loc.host}${path}`;
+export function wsUrl(path = "/ws", loc = globalThis.location, search = "") {
+  return `${loc.protocol === "https:" ? "wss" : "ws"}://${loc.host}${path}${search ? `?${search}` : ""}`;
 }

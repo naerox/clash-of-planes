@@ -1,8 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { interpolatedPose, lerpAngle, lerpVec, lerpWrapped } from "./interpolate.js";
-import { ARENA } from "../sim/arena.js";
-import { Vector2 } from "../sim/vector.js";
+import { ARENA, Vector2 } from "@dogfight/shared";
 
 test("lerpAngle crosses ±PI the short way", () => {
   const mid = lerpAngle(3.1, -3.1, 0.5);

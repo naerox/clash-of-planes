@@ -59,7 +59,10 @@ const SPEC = [
   ["SLOW_DROP_BYTES", "slowDropBytes", int(1, 1 << 30), 64 * 1024],
   ["SLOW_CLOSE_BYTES", "slowCloseBytes", int(1, 1 << 30), 1024 * 1024],
   ["SHUTDOWN_GRACE_MS", "shutdownGraceMs", int(0, 600_000), 3000],
+  ["INPUT_RESERVE", "inputReserve", int(0, 10), 1],
   ["ENABLE_DEBUG_ROUTES", "debugRoutes", bool, false],
+  // Artificial latency/jitter/loss for developing netcode (Lab 5). On unless NODE_ENV=production.
+  ["ENABLE_NETSIM", "netsim", bool, (env) => env.NODE_ENV !== "production"],
 ];
 
 export function loadConfig(env = process.env, { cwd = process.cwd() } = {}) {
@@ -69,7 +72,8 @@ export function loadConfig(env = process.env, { cwd = process.cwd() } = {}) {
   for (const [name, key, parser, fallback] of SPEC) {
     const raw = env[name];
     if (raw === undefined) {
-      config[key] = parser === "dir" ? resolve(cwd, fallback) : fallback;
+      const value = typeof fallback === "function" ? fallback(env) : fallback;
+      config[key] = parser === "dir" ? resolve(cwd, value) : value;
       continue;
     }
     try {
