@@ -13,22 +13,19 @@ import {
   drawShip,
   drawShipStatus,
 } from "./render/draw.js";
+import { drawNetgraph } from "./render/netgraph.js";
+import { ParticleSystem } from "./render/particles.js";
 import {
   busyWait,
-  createVariableLoop,
   getBugDemo,
   getExperiment,
   intervalSchedule,
   runBugDemo,
 } from "./experiments.js";
 
-import { World } from "./sim/world.js";
-import { Ship } from "./sim/ship.js";
-import { Asteroid, ASTEROID_PARAMS } from "./sim/asteroid.js";
-import { Vector2 } from "./sim/vector.js";
-import { ARENA } from "./sim/arena.js";
-import { attachHoming } from "./sim/homing.js";
-import { EventBus } from "./sim/events.js";
+import { STEP, World } from "@dogfight/shared";
+import { EventBus } from "./events.js";
+import { GameSession } from "./game/session.js";
 
 import { once } from "./async.js";
 import { loadAll, loadManifest } from "./assets/loadAll.js";
@@ -42,14 +39,17 @@ import { mountLobbyView } from "./lobby/lobbyView.js";
 import { Connection, wsUrl } from "./net/connection.js";
 import { SERVER_ERRORS, describeClose, msg } from "./net/protocol.js";
 import { mountChat } from "./ui/chat.js";
+import { mountNetPanel } from "./ui/netpanel.js";
 
 const MANIFEST_URL = "/assets/manifest.json";
 const ASSET_BASE = new URL("/assets/", window.location.href);
 const NET = { timeoutMs: 3000, attempts: 3 }; // per request: 3 attempts, 3 s each
 
+const query = new URLSearchParams(window.location.search);
 const view = setupCanvas(document.querySelector("#game"));
 const overlay = document.querySelector("#overlay");
 const chatRoot = document.querySelector("#chat");
+const netPanelRoot = document.querySelector("#netpanel");
 const bus = new EventBus();
 const faults = readFaults();
 
@@ -148,6 +148,26 @@ async function chooseRoom(config, { failures, bootId }, extraNotes = []) {
 
 // ---------------------------------------------------------------- 2b. the real socket
 
+/** `?lag=100&jitter=30&drop=0.02` — handed to the server, which delays/loses OUR traffic on purpose. */
+function netQuery() {
+  const out = new URLSearchParams();
+  for (const key of ["lag", "jitter", "drop"]) if (query.has(key)) out.set(key, query.get(key));
+  return out.toString();
+}
+
+/** Netcode options from the URL, so a demo can be reproduced by sharing a link. */
+function netOptions() {
+  const flag = (key, fallback) => (query.has(key) ? query.get(key) !== "0" : fallback);
+  const num = (key, fallback) => (query.has(key) ? Number(query.get(key)) : fallback);
+  return {
+    predict: flag("predict", true),
+    reconcile: flag("reconcile", true),
+    smoothMs: num("smooth", 100),
+    interpMs: num("interp", 100),
+    chaos: num("chaos", 0),
+  };
+}
+
 /**
  * Opens the WebSocket, sends `join`, and resolves once the server answers `joined`. The
  * server's own refusal ("room is full", "name is already taken") becomes the error message,
@@ -156,8 +176,8 @@ async function chooseRoom(config, { failures, bootId }, extraNotes = []) {
  */
 async function joinRoom({ name, room }) {
   const connection = new Connection({
-    url: wsUrl(),
-    handshake: () => msg.join(room.id, name),
+    url: wsUrl("/ws", location, netQuery()),
+    handshake: () => msg.join(room.id, name, query.get("codec") === "json" ? "json" : "binary"),
   });
   let serverSaid = "";
   connection.addEventListener("error", (e) => {
@@ -203,102 +223,111 @@ async function enterRoom(config, loaded) {
 
 // ---------------------------------------------------------------- 3. game
 
-/** A spot clear of other asteroids AND of the ship — busier rooms (8 rocks) otherwise
- * spawn one right on top of the player. */
-function spotAwayFromShip(world, ship, avoid, minDist = 300) {
-  for (let i = 0; i < 20; i++) {
-    const pos = world.randomSafeSpot(avoid);
-    if (pos.sub(ship.pos).length() > minDist) return pos;
-  }
-  return new Vector2(avoid, avoid);
-}
-
-function spawnAsteroidField(world, ship, arena) {
-  const [vMin, vMax] = arena.asteroidSpeed;
-  const randomVel = () =>
-    Vector2.fromAngle(Math.random() * Math.PI * 2, vMin + Math.random() * (vMax - vMin));
-  const spawnRock = () =>
-    world.spawn(
-      new Asteroid(spotAwayFromShip(world, ship, 120), randomVel(), ASTEROID_PARAMS.maxRadius),
-    );
-  for (let i = 0; i < arena.asteroids; i++) spawnRock();
-  // M4 of Lab 2: homing attached by composition. The room decides how many hunters.
-  for (let i = 0; i < arena.hunters; i++) {
-    const pos = spotAwayFromShip(world, ship, 120, 450);
-    attachHoming(world.spawn(new Asteroid(pos, Vector2.zero, ASTEROID_PARAMS.minRadius)), ship);
-  }
-  return spawnRock;
-}
-
-function netLabel(connection, players) {
+function netLabel(connection, session) {
   if (connection.state === "closed") return "відключено (перезавантажте сторінку)";
   if (connection.state !== "open") return "перепідключення…";
-  return `ok · гравців у кімнаті: ${players}`;
+  const r = session.stats.report();
+  return `ok · RTT ${r.rttMs.toFixed(0)} мс · ${session.codec.name}`;
 }
 
-function startGame({ name, room, config, audio, connection, joined }) {
+/**
+ * The game is no longer simulated here. We send our CONTROLS (30 times a second), predict our own
+ * ship with the shared code, and draw what the server's snapshots say about everything else.
+ */
+function startGame({ name, room, audio, connection, joined }) {
   const exp = getExperiment();
   const input = createInput(window);
   const hud = createHudFeed(bus);
-  const arena = { ...config.defaultArena, ...room.arena };
+  const particles = new ParticleSystem();
+  let showNetgraph = true;
 
-  // Lab 4 sends no game state yet (that is Lab 5): the world is still local, and the socket
-  // carries only the room roster and chat. The HUD shows how many people are in the room.
-  let playersInRoom = joined.players.length;
-  connection.addEventListener("roster", (e) => (playersInRoom = e.detail.players.length));
+  const session = new GameSession({
+    joined,
+    sendNow: (data) => connection.sendNow(data),
+    bus,
+    options: netOptions(),
+  });
+  connection.addEventListener("frame", (e) => session.noteFrame(e.detail.size));
+  connection.addEventListener("binary", (e) => session.handleBinary(e.detail));
+  connection.addEventListener("snapshot", (e) => session.handleMessage(e.detail)); // JSON codec
+  connection.addEventListener("pong", (e) => session.handleMessage(e.detail));
+  connection.addEventListener("roster", (e) => session.setPlayers(e.detail.players));
+  connection.addEventListener("joined", (e) => session.rejoin(e.detail)); // after a reconnect
+  const pinger = setInterval(() => session.ping(), 500);
+  connection.addEventListener("closed", () => clearInterval(pinger));
 
-  const world = new World({ events: bus });
-  const ship = world.spawn(new Ship(new Vector2(ARENA.width / 2, ARENA.height / 2)));
-  const spawnRock = spawnAsteroidField(world, ship, arena);
-  world.spawnPickupAt(world.randomSafeSpot(260));
+  bus.addEventListener("exploded", (e) =>
+    particles.burst(e.detail.x, e.detail.y, e.detail.kind === "ship" ? 26 : 10),
+  );
+
+  mountNetPanel(session, connection, netPanelRoot, {
+    initial: {
+      latency: Number(query.get("lag")) || 0,
+      jitter: Number(query.get("jitter")) || 0,
+      drop: Number(query.get("drop")) || 0,
+    },
+  });
+  window.addEventListener("keydown", (e) => {
+    if (e.code !== "F3") return;
+    e.preventDefault();
+    showNetgraph = !showNetgraph;
+  });
+  // a handle for measuring and debugging from the console / headless tests
+  window.__net = { session, debug: () => session.debug(), connection, lastScene: null };
 
   // Lab 2's `this` demo runs once, on start, if the URL asks for it — see experiments.js.
   const bugMode = getBugDemo();
-  if (bugMode) runBugDemo(bugMode, ship, world);
+  if (bugMode) {
+    const demoWorld = new World({ seed: 1 });
+    runBugDemo(bugMode, demoWorld.addShip("demo"), demoWorld);
+  }
 
-  const minField = Math.min(3, arena.asteroids);
-
-  function simulate(dt) {
-    if (input.justPressed("KeyR")) {
-      ship.respawnAt(world.randomSafeSpot());
-    }
-
-    const controls = readControls(input);
-    world.step(dt, controls);
-    if (controls.fire) ship.fire(world); // implicit binding, correct `this` (Lab 2)
-
-    if ([...world.ofKind("asteroid")].length < minField && Math.random() < 0.01) spawnRock();
-
+  function simulate() {
+    session.step(readControls(input)); // one fixed 30 Hz step: number it, predict it, send it
     input.endStep();
   }
 
   let frameNo = 0;
+  let lastRender = performance.now();
   function render(alpha) {
     frameNo++;
     if (exp.block && frameNo % 60 === 0) busyWait(100); // Lab 1 experiment 1, unchanged
 
+    const now = performance.now();
+    const frameMs = Math.min(100, now - lastRender);
+    lastRender = now;
+    const scene = session.render(now, alpha, frameMs);
+    window.__net.lastScene = scene;
+    particles.update(frameMs / 1000);
+
     drawBackground(view);
-    drawAsteroids(view, world, alpha);
-    drawPickups(view, world, alpha);
-    drawBullets(view, world, alpha);
-    drawParticles(view, world, alpha);
-    drawShip(view, ship, alpha);
+    drawAsteroids(view, scene.asteroids);
+    drawPickups(view, scene.pickups);
+    drawBullets(view, scene.bullets);
+    drawParticles(view, particles.list);
+    for (const ship of scene.ships) drawShip(view, ship);
     drawHud(view, loop.stats, [
-      `mode      ${exp.name}${bugMode ? `  bug:${bugMode}` : ""}`,
+      `mode      ${exp.name}${bugMode ? `  bug:${bugMode}` : ""}${exp.variable ? " (змінний крок не має сенсу онлайн)" : ""}`,
       `pilot     ${name} · ${room.name}`,
-      `network   ${netLabel(connection, playersInRoom)}`,
+      `network   ${netLabel(connection, session)}`,
       `audio     ${audio.state}`,
       `events    fired ${hud.counts.fired} · hit ${hud.counts.hits} · boom ${hud.counts.explosions}`,
     ]);
-    drawShipStatus(view, ship);
+    drawShipStatus(view, scene.me);
     drawEventFeed(view, hud.recent());
+    if (showNetgraph) drawNetgraph(view, session);
   }
 
+  // The loop is Lab 1's: a fixed step with an accumulator and render interpolation. What is new
+  // is the step: 1/30 s — the same dt the server uses — and what `simulate` does with it.
+  // (`?exp=variable` is a Lab 1 experiment about variable steps; online it would send inputs at
+  // the frame rate, so it falls back to the fixed loop.)
   const hooks = { simulate, render };
-  const loop = exp.variable
-    ? createVariableLoop(hooks)
-    : createLoop({ ...hooks, schedule: exp.interval ? intervalSchedule(16) : rafSchedule });
-
+  const loop = createLoop({
+    step: STEP,
+    ...hooks,
+    schedule: exp.interval ? intervalSchedule(16) : rafSchedule,
+  });
   loop.start();
 }
 
@@ -325,9 +354,11 @@ async function main() {
   startGame({ ...session, config, audio });
 }
 
-const params = new URLSearchParams(window.location.search);
+const params = query;
 if (params.has("puzzles")) {
   import("./lab3/puzzles.js").then((m) => m.showPuzzles(overlay));
+} else if (params.has("determinism")) {
+  import("./lab5/determinism.js").then((m) => m.showDeterminism(overlay));
 } else if (params.has("bench")) {
   const latency = params.has("latency") ? faults.latency : 150;
   import("./lab3/bench.js").then((m) => m.showBench(overlay, { latency }));

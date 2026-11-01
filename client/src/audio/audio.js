@@ -1,6 +1,6 @@
 // Web Audio. Listens to the game bus; the simulation never imports this file.
 
-import { GAME_EVENTS } from "../sim/events.js";
+import { GAME_EVENTS } from "../events.js";
 
 /**
  * `buffers`: { fire, hit, explode } → AudioBuffer | null (decoded during loading).

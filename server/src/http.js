@@ -6,7 +6,7 @@ import { readFile, stat } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { MIME, PathError, safeRelativePath, serveStatic } from "./static.js";
 import { listReplays, replayPath } from "./log/replay.js";
-import { hasControl } from "./protocol.js";
+import { TICK_RATE, hasControl } from "@dogfight/shared";
 import { RoomError } from "./rooms.js";
 
 export class HttpError extends Error {
@@ -107,6 +107,19 @@ export function createRequestListener({ config, rooms, log }) {
         }
       }
       throw new HttpError(405, "method not allowed", { Allow: "GET, POST" });
+    }
+
+    if (pathname === "/api/stats" && method === "GET") {
+      return sendJson(res, 200, {
+        tickRate: TICK_RATE,
+        uptime: Math.round(process.uptime()),
+        rssBytes: process.memoryUsage.rss(),
+        netsim: config.netsim,
+        matches: rooms
+          .list()
+          .map((r) => r.match?.summary())
+          .filter(Boolean),
+      });
     }
 
     if (pathname === "/api/replays" && method === "GET") {

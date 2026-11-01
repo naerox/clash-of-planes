@@ -1,6 +1,4 @@
-import { ARENA, wrap, wrappedDelta } from "../sim/arena.js";
-import { angleDelta, lerp } from "../sim/math.js";
-import { Vector2 } from "../sim/vector.js";
+import { ARENA, Vector2, angleDelta, lerp, wrap, wrappedDelta } from "@dogfight/shared";
 
 /** Lerp along the *shortest* path on a wrapping axis, so crossing an edge doesn't sweep the arena. */
 export function lerpWrapped(a, b, t, size) {

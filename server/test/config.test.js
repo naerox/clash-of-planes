@@ -61,3 +61,19 @@ test("cross-field checks: close threshold above drop threshold, burst ≥ rate",
   );
   assert.throws(() => loadConfig({ RATE_PER_SEC: "50", RATE_BURST: "10" }), /RATE_BURST/);
 });
+
+test("Lab 5 settings: input reserve (jitter buffer) and the network simulator", () => {
+  assert.equal(loadConfig({}).inputReserve, 1);
+  assert.equal(loadConfig({ INPUT_RESERVE: "0" }).inputReserve, 0);
+  assert.throws(() => loadConfig({ INPUT_RESERVE: "-1" }), ConfigError);
+  assert.throws(() => loadConfig({ INPUT_RESERVE: "99" }), ConfigError);
+});
+
+test("ENABLE_NETSIM defaults to on, except in production; an explicit value always wins", () => {
+  assert.equal(loadConfig({}).netsim, true);
+  assert.equal(loadConfig({ NODE_ENV: "development" }).netsim, true);
+  assert.equal(loadConfig({ NODE_ENV: "production" }).netsim, false);
+  assert.equal(loadConfig({ NODE_ENV: "production", ENABLE_NETSIM: "1" }).netsim, true);
+  assert.equal(loadConfig({ ENABLE_NETSIM: "0" }).netsim, false);
+  assert.throws(() => loadConfig({ ENABLE_NETSIM: "sure" }), /ENABLE_NETSIM/);
+});

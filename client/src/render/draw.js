@@ -1,6 +1,5 @@
-import { ARENA } from "../sim/arena.js";
+import { ARENA, BULLET_PARAMS, PICKUP_PARAMS, SHIP_PARAMS } from "@dogfight/shared";
 import { beginScreen, beginWorld } from "./canvas.js";
-import { interpolatedPose } from "./interpolate.js";
 
 const COLORS = {
   letterbox: "#070d13",
@@ -82,12 +81,15 @@ function drawBiplane(ctx, thrusting, flicker) {
   ctx.fill();
 }
 
+// Lab 5: everything below draws a SCENE — plain lists of `{ x, y, angle, … }` that the network
+// layer (game/session.js) has already placed: our own ship from prediction, everything else from
+// interpolation between snapshots. Nothing here knows where positions come from.
+
 /** Ship: drawn with the Lab 1 wrap-ghost trick (draw at up to 9 offsets, clipped to the
  * arena) so crossing an edge looks continuous. Nothing else wraps, so nothing else needs this. */
-export function drawShip(view, ship, alpha) {
-  if (ship.isDead) return;
+export function drawShip(view, ship) {
+  if (ship.dead) return;
   const { ctx } = view;
-  const { pos, angle } = interpolatedPose(ship, alpha);
   const flicker = 0.75 + 0.25 * Math.sin(performance.now() / 40);
 
   beginWorld(view);
@@ -98,54 +100,60 @@ export function drawShip(view, ship, alpha) {
 
   for (const dx of [-ARENA.width, 0, ARENA.width]) {
     for (const dy of [-ARENA.height, 0, ARENA.height]) {
-      const x = pos.x + dx;
-      const y = pos.y + dy;
+      const x = ship.x + dx;
+      const y = ship.y + dy;
       if (x < -30 || x > ARENA.width + 30 || y < -30 || y > ARENA.height + 30) continue;
       if (view.sprites) {
         const frame = ship.thrusting ? `ship_thrust_${flicker > 0.75 ? 0 : 1}` : "ship";
-        view.sprites.draw(ctx, frame, x, y, { angle, radius: ship.radius });
-        continue;
+        view.sprites.draw(ctx, frame, x, y, { angle: ship.angle, radius: SHIP_PARAMS.radius });
+      } else {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(ship.angle);
+        drawBiplane(ctx, ship.thrusting, flicker);
+        ctx.restore();
       }
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(angle);
-      drawBiplane(ctx, ship.thrusting, flicker);
-      ctx.restore();
     }
   }
   ctx.restore();
+
+  // the pilot's name, above the ship (upright, whatever the heading)
+  ctx.font = `${Math.round(13 / view.scale)}px ui-monospace, Menlo, Consolas, monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillStyle = ship.isMe ? COLORS.hpFull : COLORS.hud;
+  ctx.fillText(ship.name ?? "", ship.x, ship.y - SHIP_PARAMS.radius - 6);
+  ctx.textAlign = "left";
 }
 
-export function drawBullets(view, world, alpha) {
+export function drawBullets(view, bullets) {
   const { ctx } = view;
   beginWorld(view);
   ctx.fillStyle = COLORS.bullet;
-  for (const b of world.ofKind("bullet")) {
-    const { pos } = interpolatedPose(b, alpha);
+  for (const b of bullets) {
     if (view.sprites) {
-      view.sprites.draw(ctx, "bullet", pos.x, pos.y, { radius: b.radius });
+      view.sprites.draw(ctx, "bullet", b.x, b.y, { radius: BULLET_PARAMS.radius });
       continue;
     }
     ctx.beginPath();
-    ctx.arc(pos.x, pos.y, b.radius, 0, Math.PI * 2);
+    ctx.arc(b.x, b.y, BULLET_PARAMS.radius, 0, Math.PI * 2);
     ctx.fill();
   }
 }
 
-export function drawAsteroids(view, world, alpha) {
+export function drawAsteroids(view, asteroids) {
   const { ctx } = view;
   beginWorld(view);
-  for (const a of world.ofKind("asteroid")) {
-    const { pos, angle } = interpolatedPose(a, alpha);
+  for (const a of asteroids) {
     if (view.sprites) {
-      const frame = a.homing ? "asteroid_hunter" : `asteroid_${a.id % 3}`;
-      view.sprites.draw(ctx, frame, pos.x, pos.y, { angle, radius: a.radius });
+      const frame = a.hunter ? "asteroid_hunter" : `asteroid_${a.id % 3}`;
+      view.sprites.draw(ctx, frame, a.x, a.y, { angle: a.angle, radius: a.radius });
       continue;
     }
     ctx.save();
-    ctx.translate(pos.x, pos.y);
-    ctx.rotate(angle);
-    ctx.fillStyle = a.homing ? "#b05c5c" : COLORS.asteroid; // tinted red when homing (M4)
+    ctx.translate(a.x, a.y);
+    ctx.rotate(a.angle);
+    ctx.fillStyle = a.hunter ? "#b05c5c" : COLORS.asteroid; // tinted red when it hunts
     ctx.strokeStyle = COLORS.asteroidEdge;
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -165,35 +173,36 @@ export function drawAsteroids(view, world, alpha) {
   }
 }
 
-export function drawParticles(view, world, alpha) {
+/** @param {{x: number, y: number, radius: number, life: number}[]} particles life: 1 → 0 */
+export function drawParticles(view, particles) {
   const { ctx } = view;
   beginWorld(view);
-  for (const p of world.ofKind("particle")) {
-    const { pos } = interpolatedPose(p, alpha);
-    ctx.globalAlpha = Math.max(0, p.ttl / p.maxTtl);
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, p.life);
     ctx.fillStyle = COLORS.particle;
     ctx.beginPath();
-    ctx.arc(pos.x, pos.y, p.radius, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
 }
 
-export function drawPickups(view, world, alpha) {
+export function drawPickups(view, pickups) {
   const { ctx } = view;
   beginWorld(view);
   const pulse = 1 + 0.15 * Math.sin(performance.now() / 200);
-  for (const pk of world.ofKind("pickup")) {
-    const { pos } = interpolatedPose(pk, alpha);
+  for (const pk of pickups) {
     if (view.sprites) {
-      view.sprites.draw(ctx, `pickup_${pk.type}`, pos.x, pos.y, { radius: pk.radius * pulse });
+      view.sprites.draw(ctx, `pickup_${pk.kind}`, pk.x, pk.y, {
+        radius: PICKUP_PARAMS.radius * pulse,
+      });
       continue;
     }
-    ctx.fillStyle = pk.type === "shield" ? COLORS.pickupShield : COLORS.pickupRapid;
+    ctx.fillStyle = pk.kind === "shield" ? COLORS.pickupShield : COLORS.pickupRapid;
     ctx.save();
-    ctx.translate(pos.x, pos.y);
+    ctx.translate(pk.x, pk.y);
     ctx.rotate(Math.PI / 4);
-    const r = pk.radius * pulse;
+    const r = PICKUP_PARAMS.radius * pulse;
     ctx.fillRect(-r, -r, r * 2, r * 2);
     ctx.restore();
   }
@@ -223,7 +232,7 @@ export function drawHud(view, stats, lines = []) {
   ctx.fillStyle = COLORS.hud;
   ctx.textBaseline = "bottom";
   ctx.fillText(
-    "←/→ або A/D — поворот   ↑ або W — тяга   Space — вогонь   R — скинути   M — звук",
+    "←/→ або A/D — поворот   ↑ або W — тяга   Space — вогонь   Enter — чат   M — звук   F2 — мережа   F3 — netgraph",
     12,
     view.height - 10,
   );
@@ -245,9 +254,9 @@ export function drawEventFeed(view, entries) {
   ctx.textAlign = "left";
 }
 
-/** Ship HP bar + score, drawn separately from the perf HUD so M3's "score on the HUD"
- * requirement has one obvious, easy-to-point-at place during the defense. */
-export function drawShipStatus(view, ship) {
+/** Ship HP bar + score of the LOCAL player. `me` comes from the scene: { hp, score, dead, respawn, rapid }. */
+export function drawShipStatus(view, me) {
+  if (!me) return;
   const { ctx } = view;
   beginScreen(view);
   const barW = 160;
@@ -259,22 +268,22 @@ export function drawShipStatus(view, ship) {
   ctx.font = '13px ui-monospace, "SF Mono", Menlo, Consolas, monospace';
   ctx.fillStyle = COLORS.hud;
   ctx.textAlign = "right";
-  ctx.fillText(`score ${ship.score}`, x + barW, y - 2);
+  ctx.fillText(`score ${me.score}`, x + barW, y - 2);
   ctx.textAlign = "left";
 
   ctx.fillStyle = "#1a2c3a";
   ctx.fillRect(x, y + 16, barW, barH);
-  const pct = ship.hp / ship.params.maxHp;
+  const pct = Math.max(0, me.hp / SHIP_PARAMS.maxHp);
   ctx.fillStyle = pct > 0.3 ? COLORS.hpFull : COLORS.hpLow;
   ctx.fillRect(x, y + 16, barW * pct, barH);
   ctx.strokeStyle = COLORS.hud;
   ctx.strokeRect(x, y + 16, barW, barH);
 
-  if (ship.isDead) {
+  if (me.dead) {
     ctx.fillStyle = COLORS.hudWarn;
-    ctx.fillText("respawning…", x, y + 32);
-  } else if (ship.rapidTimer > 0) {
+    ctx.fillText(`respawning ${me.respawn.toFixed(1)}s`, x, y + 32);
+  } else if (me.rapid) {
     ctx.fillStyle = COLORS.pickupRapid;
-    ctx.fillText(`rapid ${ship.rapidTimer.toFixed(1)}s`, x, y + 32);
+    ctx.fillText("rapid fire", x, y + 32);
   }
 }

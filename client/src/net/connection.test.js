@@ -14,7 +14,7 @@ class FakeWebSocket extends EventTarget {
     FakeWebSocket.all.push(this);
   }
   send(data) {
-    this.sent.push(JSON.parse(data));
+    this.sent.push(typeof data === "string" ? JSON.parse(data) : data);
   }
   close(code = 1000, reason = "") {
     this.readyState = 3;
@@ -288,9 +288,82 @@ test("a connection attempt that never opens is abandoned after connectTimeoutMs,
 });
 
 test("protocol helpers", () => {
-  assert.deepEqual(msg.join("r-1", "Ace"), { v: 1, type: "join", room: "r-1", name: "Ace" });
+  assert.deepEqual(msg.join("r-1", "Ace"), {
+    v: 1,
+    type: "join",
+    room: "r-1",
+    name: "Ace",
+    codec: "binary",
+  });
+  assert.equal(msg.join("r-1", "Ace", "json").codec, "json");
+  assert.deepEqual(msg.netsim({ latency: 100, jitter: 20, drop: 0.02 }), {
+    v: 1,
+    type: "netsim",
+    latency: 100,
+    jitter: 20,
+    drop: 0.02,
+  });
   assert.equal(isFatalClose(4004), true);
   assert.equal(isFatalClose(1006), false);
   assert.match(describeClose(4004), /кімнат/);
   assert.equal(describeClose(4999), "код 4999");
+});
+
+test("binary frames: the Connection reports their size and hands the ArrayBuffer on untouched", () => {
+  const { conn, sockets } = setup();
+  try {
+    conn.connect();
+    sockets[0].open();
+    assert.equal(
+      sockets[0].binaryType,
+      "arraybuffer",
+      "so the browser gives us ArrayBuffer, not Blob",
+    );
+    const frames = [];
+    const binaries = [];
+    conn.addEventListener("frame", (e) => frames.push(e.detail));
+    conn.addEventListener("binary", (e) => binaries.push(e.detail));
+    const buffer = new Uint8Array([2, 1, 0, 0]).buffer;
+    sockets[0].dispatchEvent(Object.assign(new Event("message"), { data: buffer }));
+    assert.deepEqual(frames, [{ size: 4, binary: true }]);
+    assert.equal(binaries[0], buffer);
+    sockets[0].receive({ type: "roster", players: [] });
+    assert.equal(frames.at(-1).binary, false);
+    assert.ok(frames.at(-1).size > 10, "text frames report their length");
+  } finally {
+    teardown();
+  }
+});
+
+test("a binary frame counts as the server answering: it resets the reconnect backoff", () => {
+  const { conn, states, sockets } = setup();
+  try {
+    conn.connect();
+    sockets[0].drop(1006);
+    mock.timers.tick(1000);
+    sockets[1].drop(1006);
+    mock.timers.tick(1000);
+    sockets[2].open();
+    sockets[2].dispatchEvent(Object.assign(new Event("message"), { data: new ArrayBuffer(4) }));
+    sockets[2].drop(1006);
+    assert.equal(states.at(-1).delayMs, 100, "back to the first step");
+  } finally {
+    teardown();
+  }
+});
+
+test("sendNow transmits only on an open socket, and never queues", () => {
+  const { conn, sockets } = setup();
+  try {
+    conn.connect();
+    assert.equal(conn.sendNow("ping"), false, "still connecting");
+    sockets[0].open();
+    assert.equal(conn.sendNow(new Uint8Array([1, 2, 3])), true);
+    assert.equal(conn.queued, 0);
+    sockets[0].drop(1006);
+    assert.equal(conn.sendNow("x"), false, "reconnecting: gone, not queued");
+    assert.equal(conn.queued, 0);
+  } finally {
+    teardown();
+  }
 });

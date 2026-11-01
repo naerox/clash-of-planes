@@ -1,4 +1,4 @@
-import { ARENA } from "../sim/arena.js";
+import { ARENA } from "@dogfight/shared";
 
 export function setupCanvas(canvas) {
   const ctx = canvas.getContext("2d");

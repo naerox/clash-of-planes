@@ -239,3 +239,64 @@ canvas {
   opacity: 1;
   outline: 1px solid #5ec88a;
 }
+
+/* Lab 5: the network panel (F2). */
+#netpanel {
+  position: fixed;
+  right: 12px;
+  top: 100px;
+  width: 300px;
+  font:
+    12px/1.4 ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+  color: #cfe3ef;
+  background: #0e1b26ee;
+  border: 1px solid #3a6a8c;
+  border-radius: 6px;
+  padding: 8px 12px 10px;
+  box-sizing: border-box;
+}
+
+#netpanel[hidden] {
+  display: none;
+}
+
+#netpanel h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #9fc3d8;
+}
+
+#netpanel .row {
+  display: grid;
+  grid-template-columns: 112px 1fr 52px;
+  gap: 6px;
+  align-items: center;
+  margin: 3px 0;
+}
+
+#netpanel .row span {
+  color: #9fc3d8;
+}
+
+#netpanel output {
+  text-align: right;
+}
+
+#netpanel input[type="range"] {
+  width: 100%;
+  accent-color: #5ec88a;
+}
+
+#netpanel .check {
+  display: block;
+  margin-top: 4px;
+}
+
+#netpanel .hint {
+  color: #56707f;
+  margin: 8px 0 0;
+}

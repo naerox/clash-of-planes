@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRoom, connect, hello, joined, say, sleep, startApp } from "./helpers.js";
-import { CLOSE } from "../src/protocol.js";
+import { CLOSE } from "@dogfight/shared";
 import { closeReason, createSender } from "../src/ws.js";
 import { silentLogger } from "../src/logger.js";
 
@@ -113,12 +113,16 @@ test("an oversize message closes with 1009 (ws enforces maxPayload)", async () =
   });
 });
 
-test("a binary frame closes with 1003", async () => {
-  await withRoom({}, async (s) => {
-    const c = connect(s.wsUrl);
-    await c.opened;
-    c.socket.send(Buffer.from([1, 2, 3]));
-    assert.equal((await c.closed).code, CLOSE.UNSUPPORTED);
+test("a binary frame before joining is refused (4002); on a JSON connection it is 1003", async () => {
+  await withRoom({}, async (s, room) => {
+    const early = connect(s.wsUrl);
+    await early.opened;
+    early.socket.send(Buffer.from([1, 2, 3]));
+    assert.equal((await early.closed).code, CLOSE.NOT_JOINED);
+
+    const json = await joined(s.wsUrl, room.id, "Texty", { codec: "json" });
+    json.socket.send(Buffer.from([1, 1, 0, 0, 0, 0]));
+    assert.equal((await json.closed).code, CLOSE.UNSUPPORTED);
   });
 });
 

@@ -1,7 +1,7 @@
 // HUD side of the event bus: counts what the sim announces and keeps a short feed.
 // Like audio.js, it subscribes from outside — the sim never imports it.
 
-import { GAME_EVENTS } from "../sim/events.js";
+import { GAME_EVENTS } from "../events.js";
 
 const FEED_MS = 2500;
 

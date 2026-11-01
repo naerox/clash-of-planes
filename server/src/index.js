@@ -4,6 +4,7 @@ import { ConfigError, loadConfig } from "./config.js";
 import { createRequestListener } from "./http.js";
 import { createLogger } from "./logger.js";
 import { MatchLogs } from "./log/matchlog.js";
+import { Match } from "./match.js";
 import { RoomManager } from "./rooms.js";
 import { attachBroadcast, attachWebSocket } from "./ws.js";
 
@@ -24,11 +25,17 @@ export function createApp(config, log = createLogger()) {
   });
 
   rooms.on("created", (room) => {
+    // ORDER MATTERS: the match must hear "join" before the broadcast does, because it is the
+    // match that gives the player a ship — and the roster that is broadcast carries ship ids.
+    room.match = new Match({ room, log, inputReserve: config.inputReserve });
+    room.on("join", (player) => room.match.addPlayer(player));
+    room.on("leave", (player) => room.match.removePlayer(player));
     attachBroadcast(room);
     logs.attach(room);
   });
   rooms.on("removed", (room) => {
     log.info("room removed", { room: room.id });
+    room.match?.stop();
     logs.detach(room);
   });
 
