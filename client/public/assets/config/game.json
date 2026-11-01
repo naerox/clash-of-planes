@@ -1,0 +1,56 @@
+{
+  "lobby": {
+    "url": "/api/rooms",
+    "pollMs": 3000,
+    "timeoutMs": 2500
+  },
+  "audio": {
+    "volume": 0.45
+  },
+  "defaultArena": {
+    "asteroids": 4,
+    "hunters": 1,
+    "asteroidSpeed": [
+      40,
+      100
+    ]
+  },
+  "presets": [
+    {
+      "id": "training",
+      "name": "Тренувальний полігон",
+      "arena": {
+        "asteroids": 3,
+        "hunters": 0,
+        "asteroidSpeed": [
+          30,
+          60
+        ]
+      }
+    },
+    {
+      "id": "belt",
+      "name": "Пояс астероїдів",
+      "arena": {
+        "asteroids": 8,
+        "hunters": 1,
+        "asteroidSpeed": [
+          50,
+          120
+        ]
+      }
+    },
+    {
+      "id": "hunters",
+      "name": "Мисливці",
+      "arena": {
+        "asteroids": 3,
+        "hunters": 3,
+        "asteroidSpeed": [
+          40,
+          90
+        ]
+      }
+    }
+  ]
+}
