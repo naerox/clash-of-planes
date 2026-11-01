@@ -46,6 +46,7 @@ const server = spawn(process.execPath, [join(ROOT, "server/src/index.ts")], {
     LOG_DIR: logDir,
     CLIENT_DIST: join(ROOT, args.dist ?? "client/dist"),
     MAX_PLAYERS_PER_ROOM: "16",
+    MAX_CONNECTIONS_PER_IP: "100000",
     NODE_ENV: "development",
   },
   stdio: ["ignore", "ignore", "inherit"],

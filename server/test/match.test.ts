@@ -15,7 +15,7 @@ import {
   type InputMessage,
   type SnapshotMessage,
 } from "@dogfight/shared";
-import type { Logger } from "../src/logger.ts";
+import { silentLogger, type Logger } from "../src/logger.ts";
 import { Match } from "../src/match.ts";
 import { RoomManager, type Player } from "../src/rooms.ts";
 import type { Schedule } from "../src/schedule.ts";
@@ -344,7 +344,7 @@ test("far behind (CPU-bound): ticks are skipped, not raced through", () => {
 
 test("an error inside a tick is logged, and the clock keeps running", () => {
   const errors: string[] = [];
-  const log: Logger = { info() {}, warn() {}, error: (m) => void errors.push(m) };
+  const log: Logger = { ...silentLogger, error: (m) => void errors.push(m) };
   const { match, timers, clock, mkPlayer, popTimer } = setup({ log });
   mkPlayer("a");
   match.step = () => {

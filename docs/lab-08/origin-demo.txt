@@ -1,0 +1,2 @@
+before Lab 8 (no origin check): a page on http://evil.example opening ws://127.0.0.1:3321/ws → CONNECTED
+Lab 8 (origin check): a page on http://evil.example opening ws://127.0.0.1:3321/ws → refused

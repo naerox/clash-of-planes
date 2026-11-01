@@ -9,6 +9,7 @@
 import { statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { z } from "zod";
+import { LOG_LEVELS } from "./logger.ts";
 
 export class ConfigError extends Error {
   readonly problems: readonly string[];
@@ -47,6 +48,40 @@ const text = z
   .refine((s) => s.trim() !== "", "must not be empty")
   .transform((s) => s.trim());
 
+/**
+ * `ALLOWED_ORIGINS`: a comma-separated list of the sites whose pages may open a WebSocket to us
+ * (`https://dogfight.fly.dev,http://localhost:5173`). Each entry is normalised to `scheme://host[:port]`
+ * and anything that is not an origin (a path, a `*`) is refused at start-up. An EMPTY list is not
+ * "everyone": it means "only pages served by this very server" (see `originAllowed` in ws.ts).
+ */
+const origins = z
+  .string()
+  .transform((s) =>
+    s
+      .split(",")
+      .map((o) => o.trim())
+      .filter((o) => o !== ""),
+  )
+  .superRefine((list, ctx) => {
+    for (const entry of list) {
+      let ok: boolean;
+      try {
+        const url = new URL(entry);
+        ok =
+          (url.protocol === "http:" || url.protocol === "https:") &&
+          url.origin === entry.replace(/\/$/, "");
+      } catch {
+        ok = false;
+      }
+      if (!ok)
+        ctx.addIssue({
+          code: "custom",
+          message: `${JSON.stringify(entry)} is not an origin like https://example.com`,
+        });
+    }
+  })
+  .transform((list) => list.map((o) => new URL(o).origin));
+
 /** A directory setting: relative paths are resolved against the working directory. */
 const dir = (cwd: string) =>
   z
@@ -79,6 +114,17 @@ function envSchema(cwd: string, env: Env) {
       SHUTDOWN_GRACE_MS: int(0, 600_000).default(3000),
       INPUT_RESERVE: int(0, 10).default(1),
       ENABLE_DEBUG_ROUTES: bool.default(false),
+      // Lab 8 — production
+      LOG_LEVEL: z.enum(LOG_LEVELS).default("info"),
+      ALLOWED_ORIGINS: origins.default([]),
+      MAX_CONNECTIONS_PER_IP: int(1, 100_000).default(20),
+      // how many reverse proxies stand in front of us (Fly's edge: 1). 0 = trust nobody's X-Forwarded-For.
+      TRUSTED_PROXY_HOPS: int(0, 5).default(0),
+      // what is running: the release tag and the commit, stamped at image build time
+      APP_VERSION: text.default("dev"),
+      GIT_SHA: text.default("unknown"),
+      // optional: when set, GET /metrics wants `Authorization: Bearer <token>` (a secret: platform store, never git)
+      METRICS_TOKEN: text.optional(),
       // Artificial latency/jitter/loss for developing netcode (Lab 5). On unless NODE_ENV=production.
       ENABLE_NETSIM: bool.default(env.NODE_ENV !== "production"),
       // POST /api/rooms/:id/bots: AI players, for demos, profiling and load tests (Lab 7). Same default.
@@ -104,6 +150,13 @@ function envSchema(cwd: string, env: Env) {
       shutdownGraceMs: e.SHUTDOWN_GRACE_MS,
       inputReserve: e.INPUT_RESERVE,
       debugRoutes: e.ENABLE_DEBUG_ROUTES,
+      logLevel: e.LOG_LEVEL,
+      allowedOrigins: e.ALLOWED_ORIGINS,
+      maxConnectionsPerIp: e.MAX_CONNECTIONS_PER_IP,
+      trustedProxyHops: e.TRUSTED_PROXY_HOPS,
+      version: e.APP_VERSION,
+      gitSha: e.GIT_SHA,
+      metricsToken: e.METRICS_TOKEN,
       netsim: e.ENABLE_NETSIM,
       bots: e.ENABLE_BOTS,
     }));

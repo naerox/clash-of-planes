@@ -1,0 +1,27 @@
+{
+  "container": "game",
+  "totalMs": 138,
+  "exitCode": 0,
+  "clients": [
+    {
+      "name": "alice",
+      "sawShutdownMessage": true,
+      "closeCode": 1001,
+      "closedAfterMs": 62
+    },
+    {
+      "name": "bob",
+      "sawShutdownMessage": true,
+      "closeCode": 1001,
+      "closedAfterMs": 62
+    }
+  ],
+  "lastLogLines": [
+    "{\"level\":\"info\",\"time\":1793551602993,\"service\":\"dogfight\",\"version\":\"v-test\",\"sha\":\"abc1234def\",\"connId\":\"76bd8c67\",\"roomId\":\"stop-test-bb82\",\"playerId\":\"16b40d3a\",\"name\":\"bob\",\"codec\":\"binary\",\"msg\":\"joined\"}",
+    "{\"level\":\"info\",\"time\":1793551603547,\"service\":\"dogfight\",\"version\":\"v-test\",\"sha\":\"abc1234def\",\"signal\":\"SIGTERM\",\"msg\":\"shutting down\"}",
+    "{\"level\":\"info\",\"time\":1793551603554,\"service\":\"dogfight\",\"version\":\"v-test\",\"sha\":\"abc1234def\",\"connId\":\"7fb6927d\",\"roomId\":\"stop-test-bb82\",\"playerId\":\"32e615ed\",\"dropped\":0,\"msg\":\"disconnected\"}",
+    "{\"level\":\"info\",\"time\":1793551603555,\"service\":\"dogfight\",\"version\":\"v-test\",\"sha\":\"abc1234def\",\"roomId\":\"stop-test-bb82\",\"msg\":\"room removed\"}",
+    "{\"level\":\"info\",\"time\":1793551603556,\"service\":\"dogfight\",\"version\":\"v-test\",\"sha\":\"abc1234def\",\"connId\":\"76bd8c67\",\"roomId\":\"stop-test-bb82\",\"playerId\":\"16b40d3a\",\"dropped\":0,\"msg\":\"disconnected\"}",
+    "{\"level\":\"info\",\"time\":1793551603570,\"service\":\"dogfight\",\"version\":\"v-test\",\"sha\":\"abc1234def\",\"msg\":\"bye\"}"
+  ]
+}

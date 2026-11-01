@@ -3,13 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Clash of Planes — lab 04</title>
+    <title>Clash of Planes</title>
+    <meta name="description" content="Multiplayer biplane dogfights in the browser." />
+    <meta name="theme-color" content="#0b1d3a" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
   <body>
     <canvas id="game"></canvas>
     <div id="overlay" hidden></div>
     <div id="chat" hidden></div>
     <div id="netpanel" hidden></div>
+    <div id="build" aria-label="build version"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -1,0 +1,48 @@
+# HELP dogfight_messages_in_total WebSocket frames received
+# TYPE dogfight_messages_in_total counter
+dogfight_messages_in_total{type="join"} 2
+# HELP dogfight_messages_out_total WebSocket frames sent
+# TYPE dogfight_messages_out_total counter
+dogfight_messages_out_total 363
+# HELP dogfight_bytes_in_total Bytes received over WebSockets
+# TYPE dogfight_bytes_in_total counter
+dogfight_bytes_in_total 146
+# HELP dogfight_bytes_out_total Bytes sent over WebSockets
+# TYPE dogfight_bytes_out_total counter
+dogfight_bytes_out_total 132351
+# HELP dogfight_rejections_total Connections refused or clients cut off, by reason
+# TYPE dogfight_rejections_total counter
+dogfight_rejections_total{reason="origin"} 0
+dogfight_rejections_total{reason="ip_limit"} 0
+dogfight_rejections_total{reason="bad_message"} 0
+dogfight_rejections_total{reason="rate_limit"} 0
+dogfight_rejections_total{reason="join_timeout"} 0
+dogfight_rejections_total{reason="join_rejected"} 0
+dogfight_rejections_total{reason="heartbeat"} 0
+dogfight_rejections_total{reason="slow_client"} 0
+dogfight_rejections_total{reason="shutdown"} 0
+# HELP dogfight_connections_total WebSocket connections accepted
+# TYPE dogfight_connections_total counter
+dogfight_connections_total 2
+# HELP dogfight_tick_duration_seconds How long a simulation tick took to compute (budget: 1/30 s)
+# TYPE dogfight_tick_duration_seconds histogram
+dogfight_tick_duration_seconds_sum 0.14313153699999737
+dogfight_tick_duration_seconds_count 180
+# HELP dogfight_rooms Rooms that exist
+# TYPE dogfight_rooms gauge
+dogfight_rooms 1
+# HELP dogfight_players Players in rooms
+# TYPE dogfight_players gauge
+dogfight_players 8
+# HELP dogfight_connections Open WebSocket connections
+# TYPE dogfight_connections gauge
+dogfight_connections 2
+# HELP dogfight_tick_p99_seconds Slowest room's tick p99 over its last 300 ticks
+# TYPE dogfight_tick_p99_seconds gauge
+dogfight_tick_p99_seconds 0.0025499999999999997
+# HELP dogfight_event_loop_utilization Share of the time since the previous scrape that the event loop was busy (0..1)
+# TYPE dogfight_event_loop_utilization gauge
+dogfight_event_loop_utilization 0.046380756703243854
+# HELP dogfight_build_info Which build is running (always 1; the labels carry the information)
+# TYPE dogfight_build_info gauge
+dogfight_build_info{version="v1.0.0",git_sha="0123456789abcdef"} 1

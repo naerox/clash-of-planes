@@ -8,6 +8,10 @@ import type { Scene } from "./game/scene.ts";
 import type { Connection } from "./net/connection.ts";
 
 declare global {
+  /** Stamped by vite.config.ts at build time. */
+  const __APP_VERSION__: string | undefined;
+  const __GIT_SHA__: string | undefined;
+
   interface Window {
     /** Allocation-free timing of the hot paths (perf.ts); `?trace=1` also feeds DevTools. */
     __perf?: typeof import("./perf.ts");

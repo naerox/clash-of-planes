@@ -314,6 +314,9 @@ export const serverControlSchema = z.discriminatedUnion("type", [
     t: z.number(),
   }),
   z.strictObject({ type: z.literal("error"), code: z.string(), message: z.string() }),
+  // Sent just before the server closes every socket with 1001 (a deploy, a restart): the player
+  // is told WHY, and that the room will not survive the restart.
+  z.strictObject({ type: z.literal("shutdown"), reason: z.string(), reconnectAfterMs: z.number() }),
 ]);
 
 export type ServerControl = z.infer<typeof serverControlSchema>;
@@ -457,6 +460,15 @@ export const toClient = {
     from,
     text,
     t,
+  }),
+  shutdown: (
+    reason: string,
+    reconnectAfterMs: number,
+  ): WithVersion<ServerControlOf<"shutdown">> => ({
+    v: PROTOCOL_VERSION,
+    type: "shutdown",
+    reason,
+    reconnectAfterMs,
   }),
   error: (code: string, message: string): WithVersion<ServerControlOf<"error">> => ({
     v: PROTOCOL_VERSION,

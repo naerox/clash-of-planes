@@ -26,8 +26,14 @@ function start(env: Record<string, string>) {
   const ready = new Promise<string>((resolve, reject) => {
     child.stdout.on("data", (c) => {
       out += c;
-      const m = out.match(/"msg":"listening","url":"(http:\/\/[^"]+)"/);
-      if (m?.[1]) resolve(m[1]);
+      for (const line of out.split("\n")) {
+        try {
+          const entry: unknown = JSON.parse(line);
+          if (field(entry, "msg") === "listening") resolve(String(field(entry, "url")));
+        } catch {
+          /* a partial line: the rest arrives with the next chunk */
+        }
+      }
     });
     void exited.then(({ code }) => reject(new Error(`exited early with ${code}: ${err}`)));
   });

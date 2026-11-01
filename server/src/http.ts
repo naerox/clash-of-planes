@@ -1,6 +1,7 @@
 // The HTTP layer, on bare `node:http`: a router of about ten lines, a capped body reader and
 // JSON helpers. (Fastify/Express would hide all of this — the Stretch asks what exactly.)
 
+import { timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
 import { readFile, stat } from "node:fs/promises";
@@ -13,6 +14,7 @@ import { z } from "zod";
 import type { ServerConfig } from "./config.ts";
 import type { Logger } from "./logger.ts";
 import type { BotManager } from "./bots.ts";
+import type { Metrics } from "./metrics.ts";
 import { RoomError, type RoomManager } from "./rooms.ts";
 
 export type Headers = Record<string, string>;
@@ -108,22 +110,70 @@ export interface HttpDeps {
   rooms: RoomManager;
   bots: BotManager;
   log: Logger;
+  metrics: Metrics;
+  /** Can this process take new players right now? (`/ready`) */
+  readiness: () => Promise<{ ready: boolean; reason?: string }>;
+  /** Players in rooms, for `/health`. */
+  players: () => number;
 }
 
-export function createRequestListener({ config, rooms, bots, log }: HttpDeps): RequestListener {
+/** `Authorization: Bearer <token>`, compared in constant time (a timing side channel leaks a token byte by byte). */
+function bearerMatches(header: string | undefined, token: string): boolean {
+  const given = Buffer.from(header ?? "");
+  const wanted = Buffer.from(`Bearer ${token}`);
+  return given.length === wanted.length && timingSafeEqual(given, wanted);
+}
+
+export function createRequestListener({
+  config,
+  rooms,
+  bots,
+  log,
+  metrics,
+  readiness,
+  players,
+}: HttpDeps): RequestListener {
   async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     const { pathname } = url;
     const method = req.method;
     const target = req.url ?? "/";
 
+    // LIVENESS: "the process answers". Nothing else — a platform restarts a process that fails
+    // this, so it must not depend on anything that can be down without the process being broken.
     if (pathname === "/health") {
       if (method !== "GET") throw new HttpError(405, "method not allowed", { Allow: "GET" });
       return sendJson(res, 200, {
         status: "ok",
+        version: config.version,
+        sha: config.gitSha,
         uptime: Math.round(process.uptime()),
         rooms: rooms.size,
+        players: players(),
         rss: process.memoryUsage.rss(),
       });
+    }
+
+    // READINESS: "send me players". 503 while shutting down or when there is nothing to serve:
+    // the platform stops routing new connections here but does NOT restart us.
+    if (pathname === "/ready") {
+      if (method !== "GET") throw new HttpError(405, "method not allowed", { Allow: "GET" });
+      const { ready, reason } = await readiness();
+      return sendJson(res, ready ? 200 : 503, ready ? { ready: true } : { ready: false, reason });
+    }
+
+    if (pathname === "/metrics") {
+      if (method !== "GET") throw new HttpError(405, "method not allowed", { Allow: "GET" });
+      if (config.metricsToken && !bearerMatches(req.headers.authorization, config.metricsToken)) {
+        throw new HttpError(401, "metrics need a bearer token", { "WWW-Authenticate": "Bearer" });
+      }
+      const text = await metrics.render();
+      res.writeHead(200, {
+        "Content-Type": metrics.contentType,
+        "Content-Length": Buffer.byteLength(text),
+        "Cache-Control": "no-store",
+      });
+      res.end(text);
+      return;
     }
 
     if (pathname === "/api/rooms") {
