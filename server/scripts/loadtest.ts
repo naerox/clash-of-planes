@@ -6,10 +6,13 @@
 //   node scripts/loadtest.ts [--sizes=8,32,64,128] [--seconds=20] [--mode=rooms|room|both]
 //                            [--procs=3] [--label=after] [--cpu-prof]
 //
+//   --image=dogfight:test [--cpus=1] [--mem=256m]   run the server INSIDE that Docker image, limited to
+//                            the given CPU and memory: a rough stand-in for a small hosting plan (Lab 8)
+//
 //   mode "rooms": N clients in rooms of 8 (the game as designed: many small matches, one event loop)
 //   mode "room" : all N clients in ONE match (the worst case for per-match work that grows as N²)
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -75,19 +78,39 @@ async function once(mode: "rooms" | "room", n: number): Promise<Point> {
     "cpu-prof" in args
       ? ["--cpu-prof", `--cpu-prof-dir=${OUT}`, "--cpu-prof-name=server.cpuprofile"]
       : [];
-  const server = spawn(process.execPath, [...nodeArgs, join(ROOT, "server/src/index.ts")], {
-    env: {
-      ...process.env,
-      PORT: String(PORT),
-      HOST: "127.0.0.1",
-      LOG_DIR: logDir,
-      MAX_ROOMS: "1000",
-      MAX_PLAYERS_PER_ROOM: String(mode === "room" ? Math.max(n, 8) : 8),
-      ENABLE_NETSIM: "0",
-      NODE_ENV: "development",
-    },
-    stdio: ["ignore", "ignore", "inherit"],
-  });
+  const serverEnv = {
+    PORT: String(PORT),
+    HOST: "127.0.0.1",
+    LOG_DIR: logDir,
+    MAX_ROOMS: "1000",
+    MAX_PLAYERS_PER_ROOM: String(mode === "room" ? Math.max(n, 8) : 8),
+    MAX_CONNECTIONS_PER_IP: "100000", // every client of the test comes from 127.0.0.1
+    ENABLE_NETSIM: "0",
+    LOG_LEVEL: "warn",
+  };
+  const container = `loadtest-server-${PORT}`;
+  const server = args.image
+    ? spawn(
+        "docker",
+        [
+          "run",
+          "--rm",
+          "--name",
+          container,
+          "--network=host",
+          `--cpus=${args.cpus ?? "1"}`,
+          `--memory=${args.mem ?? "256m"}`,
+          ...Object.entries({ ...serverEnv, HOST: "0.0.0.0", LOG_DIR: "/app/logs" }).flatMap(
+            ([k, v]) => ["-e", `${k}=${v}`],
+          ),
+          args.image,
+        ],
+        { stdio: ["ignore", "ignore", "inherit"] },
+      )
+    : spawn(process.execPath, [...nodeArgs, join(ROOT, "server/src/index.ts")], {
+        env: { ...process.env, ...serverEnv, NODE_ENV: "development" },
+        stdio: ["ignore", "ignore", "inherit"],
+      });
   const exited = new Promise<void>((r) => server.on("exit", () => r()));
   const base = `http://127.0.0.1:${PORT}`;
   for (let i = 0; i < 100; i++) {
@@ -181,7 +204,8 @@ async function once(mode: "rooms" | "room", n: number): Promise<Point> {
     prev = s;
   }
   for (const c of children) c.child.kill("SIGTERM");
-  server.kill("SIGINT"); // graceful: also writes the --cpu-prof file
+  if (args.image) spawnSync("docker", ["stop", container], { stdio: "ignore" });
+  else server.kill("SIGINT"); // graceful: also writes the --cpu-prof file
   await exited;
 
   const point: Point = {

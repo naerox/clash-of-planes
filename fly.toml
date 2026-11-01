@@ -1,0 +1,38 @@
+# Fly.io: one machine, because a room lives in ONE process's memory (see the README, "Скільки
+# гравців тримає один процес" and "Чому не два інстанси"). The image is built and pushed by
+# .github/workflows/deploy.yml; `flyctl deploy --image … --ha=false` only points Fly at it.
+app = "clash-of-planes" # rename if the name is taken, then fix ALLOWED_ORIGINS below
+primary_region = "waw"  # Warsaw: closest to Ukraine; change to fra/ams/… for other audiences
+
+# SIGTERM → the server tells every client, closes sockets with 1001 and exits 0 in < 5 s.
+# Fly sends SIGKILL after kill_timeout seconds.
+kill_signal = "SIGTERM"
+kill_timeout = 10
+
+[env]
+  PORT = "3000"
+  HOST = "0.0.0.0"
+  LOG_LEVEL = "info"
+  # Fly's edge is exactly one reverse proxy: trust the last X-Forwarded-For entry (per-IP limits)
+  TRUSTED_PROXY_HOPS = "1"
+  MAX_CONNECTIONS_PER_IP = "20"
+  # pages on these origins may open a WebSocket; empty would mean "only pages served by this host"
+  ALLOWED_ORIGINS = "https://clash-of-planes.fly.dev"
+
+[http_service]
+  internal_port = 3000
+  force_https = true          # http:// is redirected: the page, and so the WebSocket, is always TLS (wss://)
+  auto_stop_machines = "off"  # a stopped machine means the first player waits for a cold start, and rooms vanish
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/ready"           # readiness: 503 while shutting down → no new players are routed to a dying machine
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

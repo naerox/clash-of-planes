@@ -1,0 +1,53 @@
+{
+  "beforeFreeze": {
+    "health": {
+      "ok": true,
+      "ms": 3
+    },
+    "elu": 0.0289068850552103,
+    "tick": {
+      "tickIntervalMs": {
+        "max": 35.202
+      },
+      "tickLatenessMs": {
+        "max": 1.503
+      },
+      "skippedTicks": 0
+    }
+  },
+  "frozenFor": "about 5 s (three 1 s probes, a 1 s pause, one more probe)",
+  "whileFrozen": {
+    "health": {
+      "ok": false,
+      "ms": 1002
+    },
+    "ready": {
+      "ok": false,
+      "ms": 1002
+    },
+    "metrics": {
+      "ok": false,
+      "ms": 1004
+    },
+    "healthAgain": {
+      "ok": false,
+      "ms": 1002
+    }
+  },
+  "afterResume": {
+    "health": {
+      "ok": true,
+      "ms": 5
+    },
+    "elu": 0.10225483159298875,
+    "tick": {
+      "tickIntervalMs": {
+        "max": 5040.157
+      },
+      "tickLatenessMs": {
+        "max": 5007.363
+      },
+      "skippedTicks": 149
+    }
+  }
+}

@@ -37,3 +37,48 @@ jobs:
           path: |
             test-results/
             docs/lab-07/e2e-*.png
+
+  # The image is part of the product: build it on every push, and check what the lab demands of it.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: dogfight:ci
+          build-args: |
+            APP_VERSION=ci
+            GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image size is under 200 MB
+        run: |
+          bytes=$(docker image inspect dogfight:ci --format '{{.Size}}')
+          echo "image size: $((bytes / 1000000)) MB"
+          test "$bytes" -lt 200000000
+
+      - name: Runs as non-root, healthy, and /health shows the commit
+        run: |
+          docker run -d --name game -p 3000:3000 dogfight:ci
+          for i in $(seq 1 30); do curl -fsS localhost:3000/ready && break; sleep 1; done
+          test "$(docker exec game id -u)" != 0
+          curl -fsS localhost:3000/health | jq -e --arg s "${{ github.sha }}" '.sha == $s and .version == "ci"'
+          for i in $(seq 1 30); do
+            test "$(docker inspect game --format '{{.State.Health.Status}}')" = healthy && break; sleep 2
+          done
+          test "$(docker inspect game --format '{{.State.Health.Status}}')" = healthy
+
+      - name: "docker stop: exit code 0 in under 10 s (SIGTERM reaches Node)"
+        run: |
+          start=$(date +%s.%N)
+          docker stop game
+          elapsed=$(echo "$(date +%s.%N) - $start" | bc)
+          code=$(docker inspect game --format '{{.State.ExitCode}}')
+          echo "stopped in ${elapsed}s, exit code ${code}"
+          docker logs game 2>&1 | tail -5
+          test "$code" = 0
+          test "$(echo "$elapsed < 9" | bc)" = 1

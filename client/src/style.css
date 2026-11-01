@@ -300,3 +300,15 @@ canvas {
   color: #56707f;
   margin: 8px 0 0;
 }
+
+#build {
+  position: fixed;
+  right: 8px;
+  bottom: 6px;
+  font:
+    11px/1.2 ui-monospace,
+    monospace;
+  color: rgba(244, 241, 222, 0.55);
+  pointer-events: none;
+  z-index: 5;
+}

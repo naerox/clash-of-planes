@@ -1,0 +1,18 @@
+# A production-like run on your own machine:   docker compose up --build
+# then open http://localhost:3000 (two tabs = two players).
+services:
+  game:
+    build:
+      context: .
+      args:
+        APP_VERSION: ${APP_VERSION:-local}
+        GIT_SHA: ${GIT_SHA:-local}
+    ports:
+      - "3000:3000"
+    environment:
+      LOG_LEVEL: info
+      # which sites may open a WebSocket to this server; empty = only pages served by it
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      MAX_CONNECTIONS_PER_IP: "20"
+    restart: unless-stopped
+    stop_grace_period: 10s # `docker stop` waits this long before SIGKILL; the server needs < 5 s

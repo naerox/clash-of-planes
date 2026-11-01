@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { startHeartbeat, type Pingable } from "../src/heartbeat.ts";
-import type { Logger } from "../src/logger.ts";
+import { silentLogger, type Logger } from "../src/logger.ts";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -18,7 +18,7 @@ class FakeSocket implements Pingable {
 
 function setup(maxMissedPongs = 2) {
   const warnings: string[] = [];
-  const log: Logger = { info() {}, error() {}, warn: (m) => void warnings.push(m) };
+  const log: Logger = { ...silentLogger, warn: (m) => void warnings.push(m) };
   const sockets = new Map<FakeSocket, { missed: number }>();
   const add = (): FakeSocket => {
     const s = new FakeSocket();
@@ -90,7 +90,7 @@ test("a socket we have no state for (not joined through our handler) is left alo
     stateOf: () => undefined,
     intervalMs: 1000,
     maxMissedPongs: 1,
-    log: { info() {}, warn() {}, error() {} },
+    log: silentLogger,
   });
   vi.advanceTimersByTime(5000);
   expect(stray.pings + Number(stray.terminated)).toBe(0);

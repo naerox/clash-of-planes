@@ -1,0 +1,10 @@
+Build twice with a one-line change in client/src/ui/version.ts between the builds
+(docker build, buildkit cache emptied before each variant; vfs storage, 4 vCPU):
+
+A  package*.json copied first, `npm ci`, THEN the sources   (the Dockerfile in the repo)
+   first build (cold)            74.5 s
+   rebuild after the 1-line edit 10.2 s      <- `npm ci` layer reused from cache
+
+B  everything copied first (`COPY . .`), THEN `npm ci`
+   first build (cold)            61.3 s
+   rebuild after the 1-line edit 58.5 s      <- the edit invalidates COPY, so `npm ci` runs again

@@ -43,7 +43,10 @@ import { Lobby, type LobbyEvents } from "./lobby/lobby.ts";
 import { mountLobbyView } from "./lobby/lobbyView.ts";
 import { Connection, wsUrl } from "./net/connection.ts";
 import { SERVER_ERRORS, describeClose, msg } from "./net/protocol.ts";
+import { watchForLoss } from "./net/lobbyReturn.ts";
 import { mountChat } from "./ui/chat.ts";
+import { saveNotice, takeNotice } from "./ui/notice.ts";
+import { mountVersion } from "./ui/version.ts";
 import { mountNetPanel } from "./ui/netpanel.ts";
 
 const MANIFEST_URL = "/assets/manifest.json";
@@ -230,7 +233,9 @@ async function joinRoom({
 
 /** Lobby → socket, as a loop: a refused join returns the player to the lobby with the reason. */
 async function enterRoom(config: GameConfig, loaded: LoadResult & { bootId: string }) {
-  let notes: string[] = [];
+  // a reload that was caused by the server going away leaves a sentence for the lobby to show
+  const left = takeNotice();
+  let notes: string[] = left ? [left] : [];
   for (;;) {
     const choice = await chooseRoom(config, loaded, notes);
     try {
@@ -284,6 +289,14 @@ function startGame({ name, room, audio, connection, joined }: StartOptions): voi
   connection.on("joined", (m) => session.rejoin(m)); // after a reconnect
   const pinger = setInterval(() => session.ping(), 500);
   connection.on("closed", () => clearInterval(pinger));
+  // The server restarted or vanished: leave the frozen arena for the lobby, and say why.
+  watchForLoss(connection, {
+    onLost: (reason) => {
+      saveNotice(reason);
+      connection.close();
+      location.reload();
+    },
+  });
 
   bus.on("exploded", (e) => particles.burst(e.x, e.y, e.kind === "ship" ? 26 : 10));
 
@@ -408,6 +421,14 @@ const showFatal = (err: unknown): void => {
   overlay.hidden = false;
   overlay.textContent = `Неочікувана помилка: ${errorMessage(err)}`;
 };
+
+// installable app + faster second visit (see public/sw.js); only where a service worker is allowed
+if (import.meta.env.PROD && "serviceWorker" in navigator && window.isSecureContext) {
+  navigator.serviceWorker.register("/sw.js").catch((err: unknown) => {
+    console.warn("[pwa] service worker not registered:", err);
+  });
+}
+void mountVersion(requireElement("#build", HTMLElement));
 
 const params = query;
 if (params.has("puzzles")) {

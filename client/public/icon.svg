@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0b1d3a"/>
+  <circle cx="256" cy="256" r="196" fill="#12305f"/>
+  <!-- a biplane seen from above: fuselage, two pairs of wings, tail -->
+  <g fill="#f4f1de" stroke="#0b1d3a" stroke-width="6" stroke-linejoin="round">
+    <rect x="86" y="196" width="340" height="44" rx="14"/>
+    <rect x="106" y="272" width="300" height="44" rx="14"/>
+    <path d="M236 92 h40 l14 58 v236 l-34 34 -34 -34 v-236 z"/>
+    <path d="M196 396 h120 l8 34 h-136 z"/>
+  </g>
+  <circle cx="256" cy="116" r="22" fill="#e07a3f" stroke="#0b1d3a" stroke-width="6"/>
+  <circle cx="256" cy="236" r="16" fill="#0b1d3a"/>
+</svg>

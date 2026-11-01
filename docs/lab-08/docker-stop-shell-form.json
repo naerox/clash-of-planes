@@ -1,0 +1,24 @@
+{
+  "container": "gamesh",
+  "totalMs": 10322,
+  "exitCode": 137,
+  "clients": [
+    {
+      "name": "alice",
+      "sawShutdownMessage": false,
+      "closeCode": 1006,
+      "closedAfterMs": 10277
+    },
+    {
+      "name": "bob",
+      "sawShutdownMessage": false,
+      "closeCode": 1006,
+      "closedAfterMs": 10276
+    }
+  ],
+  "lastLogLines": [
+    "{\"level\":\"info\",\"time\":1793551636867,\"service\":\"dogfight\",\"version\":\"dev\",\"sha\":\"unknown\",\"url\":\"http://0.0.0.0:3100\",\"logDir\":\"/tmp/logs\",\"allowedOrigins\":[],\"maxConnectionsPerIp\":20,\"msg\":\"listening\"}",
+    "{\"level\":\"info\",\"time\":1793551637844,\"service\":\"dogfight\",\"version\":\"dev\",\"sha\":\"unknown\",\"connId\":\"bb83a8b2\",\"roomId\":\"stop-test-2daa\",\"playerId\":\"82da42ad\",\"name\":\"alice\",\"codec\":\"binary\",\"msg\":\"joined\"}",
+    "{\"level\":\"info\",\"time\":1793551638342,\"service\":\"dogfight\",\"version\":\"dev\",\"sha\":\"unknown\",\"connId\":\"c5b9f80b\",\"roomId\":\"stop-test-2daa\",\"playerId\":\"bed986f9\",\"name\":\"bob\",\"codec\":\"binary\",\"msg\":\"joined\"}"
+  ]
+}

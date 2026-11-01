@@ -1,0 +1,55 @@
+{
+  "attackers": 6,
+  "bystanderMessages": 754,
+  "attackerCloseCodes": {
+    "4000": 3090
+  },
+  "baseline": {
+    "phase": "baseline",
+    "seconds": 10,
+    "victimTick": {
+      "mean": 0.614,
+      "p99": 1.595,
+      "max": 2.263,
+      "n": 300
+    },
+    "victimInterval": {
+      "p99": 35.978,
+      "max": 45.318
+    },
+    "perSecond": {
+      "invalidFramesIn": 0,
+      "bytesIn": 0,
+      "bytesOut": 17482.4,
+      "messagesOut": 60,
+      "rejectedBadMessage": 0,
+      "rejectedIpLimit": 0,
+      "connectionsAccepted": 0
+    },
+    "eventLoopUtilization": 0.05717414389064261
+  },
+  "attack": {
+    "phase": "attack",
+    "seconds": 10,
+    "victimTick": {
+      "mean": 0.272,
+      "p99": 0.472,
+      "max": 0.696,
+      "n": 300
+    },
+    "victimInterval": {
+      "p99": 40.045,
+      "max": 40.403
+    },
+    "perSecond": {
+      "invalidFramesIn": 289.8,
+      "bytesIn": 48732.5,
+      "bytesOut": 777591.7,
+      "messagesOut": 2418.8,
+      "rejectedBadMessage": 289.8,
+      "rejectedIpLimit": 0,
+      "connectionsAccepted": 289.5
+    },
+    "eventLoopUtilization": 0.52614998966855
+  }
+}

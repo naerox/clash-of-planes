@@ -65,6 +65,8 @@ export interface MatchOptions {
    *        bursts back into one step per tick, at the price of one tick (33 ms) of extra delay.
    */
   inputReserve?: number;
+  /** Called with how long each tick took, in ms (the metrics histogram listens). */
+  onTick?: (ms: number) => void;
   deps?: MatchDeps;
 }
 
@@ -110,14 +112,17 @@ export class Match {
     bytesOut: 0,
   };
   lastStart: number | null = null;
+  readonly onTick: ((ms: number) => void) | undefined;
 
   constructor({
     room,
     seed = randomInt(0, 2 ** 32),
     log,
     inputReserve = 0,
+    onTick,
     deps = {},
   }: MatchOptions) {
+    this.onTick = onTick;
     this.room = room;
     this.inputReserve = inputReserve;
     this.log = log;
@@ -236,6 +241,7 @@ export class Match {
 
     const finished = this.now();
     this.stats.duration.add(finished - started);
+    this.onTick?.(finished - started);
     this.nextAt += STEP_MS;
     const behind = finished - this.nextAt;
     if (behind > 0) this.stats.overruns++;

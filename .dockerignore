@@ -1,0 +1,25 @@
+# nothing here is needed to build or run the image — and every file listed makes the build
+# context (what is sent to the Docker daemon) smaller and the cache less easily invalidated
+.git
+.github
+**/node_modules
+**/dist
+**/dist-readable
+logs
+**/logs
+coverage
+test-results
+playwright-report
+.e2e-logs
+.env
+.env.*
+!.env.example
+docs
+experiments
+e2e
+tools
+**/*.test.ts
+**/test
+README.md
+*.md
+**/*.cpuprofile

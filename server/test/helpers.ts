@@ -113,7 +113,8 @@ export function connect(url: string, options?: ClientOptions) {
       case "joined":
       case "roster":
       case "chat":
-      case "error": {
+      case "error":
+      case "shutdown": {
         const waiter = waiting.shift();
         if (waiter) waiter(msg);
         else inbox.push(msg);

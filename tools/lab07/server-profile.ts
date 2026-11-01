@@ -42,6 +42,7 @@ const server = spawn(
       HOST: "127.0.0.1",
       LOG_DIR: mkdtempSync(join(tmpdir(), "lab07-log-")),
       MAX_PLAYERS_PER_ROOM: "64",
+      MAX_CONNECTIONS_PER_IP: "100000",
       NODE_ENV: "development",
     },
     stdio: ["ignore", "ignore", "inherit"],

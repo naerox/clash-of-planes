@@ -1,0 +1,2 @@
+console.error: Mixed Content: The page at 'https://game.example/' was loaded over HTTPS, but attempted to connect to the insecure WebSocket endpoint 'ws://server.example/ws'. This request has been blocked; this endpoint must be available over WSS.
+result: SecurityError: Failed to construct 'WebSocket': An insecure WebSocket connection may not be initiated from a page loaded over HTTPS.

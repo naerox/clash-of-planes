@@ -47,6 +47,11 @@ export default [
     rules,
   },
   {
+    // the service worker is neither a page nor Node: it has `self`, `caches` and `fetch`
+    files: ["client/public/sw.js"],
+    languageOptions: { sourceType: "script", globals: globals.serviceworker },
+  },
+  {
     // the browser client
     files: ["client/src/**/*.ts"],
     languageOptions: { sourceType: "module", globals: globals.browser },

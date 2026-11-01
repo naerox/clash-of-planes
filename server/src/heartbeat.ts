@@ -20,6 +20,8 @@ export interface HeartbeatOptions<S extends Pingable> {
   intervalMs: number;
   maxMissedPongs: number;
   log: Logger;
+  /** Called for every socket that is cut off (the metrics count it). */
+  onLost?: () => void;
 }
 
 /** Starts the timer; returns a function that stops it. */
@@ -29,6 +31,7 @@ export function startHeartbeat<S extends Pingable>({
   intervalMs,
   maxMissedPongs,
   log,
+  onLost,
 }: HeartbeatOptions<S>): () => void {
   const timer = setInterval(() => {
     for (const socket of clients()) {
@@ -36,6 +39,7 @@ export function startHeartbeat<S extends Pingable>({
       if (!state) continue;
       if (state.missed >= maxMissedPongs) {
         log.warn("heartbeat lost", { missed: state.missed });
+        onLost?.();
         socket.terminate();
         continue;
       }

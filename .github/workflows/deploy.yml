@@ -1,0 +1,85 @@
+# A git tag deploys.   git tag v1.0.0 && git push origin v1.0.0
+#
+#   1. image   build the Docker image, stamp the tag and the commit into it, push it to GHCR
+#   2. deploy  tell Fly to run exactly that image (one machine)
+#   3. verify  ask the PUBLIC url what it is running; fail the workflow if it is not this tag
+#
+# One-time setup (README, "Як це розгорнуто"):
+#   secret   FLY_API_TOKEN   `fly tokens create deploy -a <app>`
+#   variable PUBLIC_URL      https://<app>.fly.dev
+#   the GHCR package must be public once (Package settings → Change visibility), so Fly can pull it
+name: Deploy
+
+on:
+  push:
+    tags: ["v*"]
+
+# deploys never overlap, and a newer tag does not cancel one that is half-way through
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.IMAGE }}:latest
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
+            GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # --ha=false: Fly would otherwise start TWO machines, and a room would exist in only one of them
+      - run: flyctl deploy --image "$IMAGE:${{ github.ref_name }}" --ha=false --strategy immediate
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: The public URL runs this tag (and answers on TLS)
+        env:
+          PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+          WANT_VERSION: ${{ github.ref_name }}
+          WANT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          case "$PUBLIC_URL" in https://*) ;; *) echo "PUBLIC_URL must be an https:// address"; exit 1;; esac
+          for i in $(seq 1 30); do
+            body="$(curl -fsS --max-time 5 "$PUBLIC_URL/health" || true)"
+            echo "attempt $i: $body"
+            if echo "$body" | jq -e --arg v "$WANT_VERSION" --arg s "$WANT_SHA" '.version == $v and .sha == $s' >/dev/null; then
+              curl -fsS --max-time 5 "$PUBLIC_URL/ready" >/dev/null
+              echo "OK: $PUBLIC_URL is running $WANT_VERSION ($WANT_SHA)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "the public URL is not running $WANT_VERSION"; exit 1
