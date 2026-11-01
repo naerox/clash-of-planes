@@ -1,0 +1,19 @@
+name: typecheck
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # the lab's budget: fewer than five `as` casts and no `any` (tools/count-casts.ts)
+      - run: npm run check:casts

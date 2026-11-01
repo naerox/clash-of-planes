@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    // what we emit: nothing. Node strips the types at run time, Vite (esbuild) strips them at build time;
+    // `tsc` is only the checker.
+    "noEmit": true,
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "skipLibCheck": true,
+
+    // the strict family, plus the ones Matt Pocock's tsconfig cheat sheet recommends
+    "strict": true,
+    "noUncheckedIndexedAccess": true, // xs[i] is T | undefined: a Map.get-style check, for arrays
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // modules: files are written as Node and the browser read them, with the real extension
+    "verbatimModuleSyntax": true, // `import type` for types: what survives to run time is honest
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true // no enum / namespace / parameter properties: Node can strip every file
+  }
+}

@@ -1,0 +1,136 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { Lobby, parseRooms, validateName, type LobbyEvents } from "./lobby.ts";
+import { once, sleep } from "../async.ts";
+import type { FetchJson, FetchOptions } from "../net/http.ts";
+
+const ROOMS = {
+  rooms: [
+    { id: "a", name: "Alpha", players: 1, maxPlayers: 4, arena: { asteroids: 3 } },
+    { id: "full", name: "Full", players: 2, maxPlayers: 2, arena: {} },
+  ],
+};
+
+function fakeFetch(handler: (signal: AbortSignal | undefined, n: number) => unknown = () => ROOMS) {
+  const calls: { url: string; signal: AbortSignal | undefined }[] = [];
+  const fetchJson: FetchJson = async (url, opts) => {
+    calls.push({ url, signal: opts?.signal });
+    return handler(opts?.signal, calls.length);
+  };
+  return { fetchJson, calls };
+}
+
+const hangUntilAborted = (signal: AbortSignal | undefined): Promise<never> =>
+  new Promise((_, reject) => signal?.addEventListener("abort", () => reject(signal.reason)));
+
+test("validateName trims and bounds the name", () => {
+  assert.deepEqual(validateName("  Ace "), { ok: true, name: "Ace" });
+  assert.equal(validateName("   ").ok, false);
+  assert.equal(validateName("x".repeat(17)).ok, false);
+});
+
+test("parseRooms rejects a payload without a rooms array (the schema names the problem)", () => {
+  assert.throws(() => parseRooms({ nope: 1 }), { name: "ZodError" });
+  assert.throws(() => parseRooms({ rooms: [{ id: "a" }] }), { name: "ZodError" });
+  assert.equal(parseRooms(ROOMS).length, 2);
+});
+
+test("start() fetches at once, then polls on the interval; stop() ends polling", async () => {
+  const { fetchJson, calls } = fakeFetch();
+  const lobby = new Lobby({ fetchJson, intervalMs: 30, isVisible: () => true });
+  const first = once(lobby, "rooms");
+  lobby.start();
+  assert.equal((await first).rooms.length, 2);
+  await sleep(100);
+  lobby.stop();
+  const n = calls.length;
+  assert.ok(n >= 3, `polled ${n} times`);
+  await sleep(80);
+  assert.equal(calls.length, n, "no requests after stop()");
+});
+
+test("a hidden page skips polls after the first one", async () => {
+  const { fetchJson, calls } = fakeFetch();
+  const lobby = new Lobby({ fetchJson, intervalMs: 20, isVisible: () => false });
+  lobby.start();
+  await sleep(100);
+  lobby.stop();
+  assert.equal(calls.length, 1);
+});
+
+test("every request carries a timeout: a hanging server becomes an error status", async () => {
+  const { fetchJson } = fakeFetch((signal) => hangUntilAborted(signal));
+  const lobby = new Lobby({ fetchJson, intervalMs: 10_000, timeoutMs: 30 });
+  const statuses: LobbyEvents["status"][] = [];
+  lobby.on("status", (e) => statuses.push(e));
+  lobby.start();
+  await sleep(80);
+  lobby.stop();
+  const err = statuses.find((s) => s.state === "error");
+  assert.ok(err, "an error status was emitted");
+  assert.match(err.error ?? "", /не відповів/);
+});
+
+test("stop() aborts the request in flight, silently", async () => {
+  const { fetchJson, calls } = fakeFetch((signal) => hangUntilAborted(signal));
+  const lobby = new Lobby({ fetchJson, intervalMs: 10_000, timeoutMs: 10_000 });
+  const statuses: string[] = [];
+  lobby.on("status", (e) => statuses.push(e.state));
+  lobby.start();
+  await sleep(10);
+  lobby.stop();
+  await sleep(10);
+  assert.equal(calls[0]?.signal?.aborted, true);
+  assert.deepEqual(statuses, ["loading"], "leaving the lobby is not reported as an error");
+});
+
+test("join validates, stops polling and emits join with the room config", async () => {
+  const { fetchJson } = fakeFetch();
+  const lobby = new Lobby({ fetchJson, intervalMs: 10_000 });
+  const loaded = once(lobby, "rooms");
+  lobby.start();
+  await loaded;
+  assert.throws(() => lobby.join("a", ""), RangeError);
+  assert.throws(() => lobby.join("full", "Ace"), /заповнена/);
+  const joined = once(lobby, "join");
+  lobby.join("a", " Ace ");
+  const detail = await joined;
+  assert.equal(detail.name, "Ace");
+  assert.deepEqual(detail.room.arena, { asteroids: 3 });
+  assert.equal(lobby.running, false);
+});
+
+test("createRoom POSTs once (no retries), adds the room to the list and emits 'created'", async () => {
+  const calls: { url: string; opts: FetchOptions | undefined }[] = [];
+  const fetchJson: FetchJson = async (url, opts) => {
+    calls.push({ url, opts });
+    return { id: "belt-ab12", name: "Belt", players: 0, maxPlayers: 4, arena: { asteroids: 8 } };
+  };
+  const lobby = new Lobby({ fetchJson });
+  const created = once(lobby, "created");
+  const room = await lobby.createRoom({ name: "Belt", arena: { asteroids: 8 }, maxPlayers: 4 });
+  assert.equal(room.id, "belt-ab12");
+  assert.equal((await created).room.id, "belt-ab12");
+  assert.deepEqual(
+    lobby.rooms.map((r) => r.id),
+    ["belt-ab12"],
+  );
+  const init = calls[0]?.opts?.init;
+  assert.equal(calls[0]?.opts?.attempts, 1);
+  assert.equal(init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(init?.body)), {
+    name: "Belt",
+    arena: { asteroids: 8 },
+    maxPlayers: 4,
+  });
+});
+
+test("createRoom passes the server's refusal on to the caller", async () => {
+  const lobby = new Lobby({
+    fetchJson: async () => {
+      throw new Error("HTTP 409 Conflict: server is limited to 20 rooms");
+    },
+  });
+  await assert.rejects(lobby.createRoom({ name: "x", arena: {} }), /limited to 20 rooms/);
+  assert.deepEqual(lobby.rooms, []);
+});

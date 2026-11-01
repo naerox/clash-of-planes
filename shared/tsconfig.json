@@ -1,0 +1,13 @@
+{
+  // shared/src is compiled with NO environment at all: lib is the bare language, no DOM, and
+  // `types: []` keeps @types/node out. `window`, `process`, `setTimeout` or `console` in this
+  // folder is a TYPE error as well as a lint error. (src/env.d.ts adds the one thing both runtimes provide.)
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": ["src"]
+}
