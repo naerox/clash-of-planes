@@ -24,6 +24,8 @@ env:
 
 jobs:
   image:
+    # no hosting configured (PUBLIC_URL unset) → the whole pipeline is skipped, not failed
+    if: ${{ vars.PUBLIC_URL != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
