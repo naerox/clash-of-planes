@@ -1,0 +1,9 @@
+{
+  // Tests and scripts: they also run the browser client's session code in Node (test/harness.ts),
+  // so this project sees the DOM types that code was written against.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src", "test", "scripts"]
+}

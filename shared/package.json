@@ -5,9 +5,13 @@
   "type": "module",
   "description": "Simulation, protocol and codecs used by BOTH the browser client and the Node server",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "node --test \"test/**/*.test.js\""
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
   }
 }

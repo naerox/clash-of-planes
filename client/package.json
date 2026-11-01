@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test \"src/**/*.test.js\"",
-    "assets": "node scripts/gen-assets.js"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "assets": "node scripts/gen-assets.ts"
   },
   "devDependencies": {
     "vite": "^8.3.2"

@@ -1,0 +1,10 @@
+{
+  // tests and scripts of shared/ run in Node
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"]
+  },
+  "include": ["src", "test", "scripts"]
+}

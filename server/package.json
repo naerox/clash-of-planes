@@ -4,17 +4,21 @@
   "version": "0.1.0",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18"
   },
   "scripts": {
-    "dev": "node --watch --env-file-if-exists=.env src/index.js",
-    "start": "node --env-file-if-exists=.env src/index.js",
-    "test": "node --test \"test/**/*.test.js\"",
-    "bots": "node scripts/bots.js --spawn",
-    "report": "node scripts/netcode-report.js"
+    "dev": "node --watch --env-file-if-exists=.env src/index.ts",
+    "start": "node --env-file-if-exists=.env src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "bots": "node scripts/bots.ts --spawn",
+    "report": "node scripts/netcode-report.ts"
   },
   "dependencies": {
-    "ws": "^8.18.0",
-    "@dogfight/shared": "*"
+    "@dogfight/shared": "*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2"
   }
 }
