@@ -11,6 +11,7 @@ export function runDeterminismCheck() {
   const ms = performance.now() - t0;
   const b = scenarioHash();
 
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- monkey-patching on purpose, restored below
   const original = Ship.prototype.integrate;
   Ship.prototype.integrate = function noisy(this: Ship, controls: Controls, dt: number): void {
     original.call(this, controls, dt);

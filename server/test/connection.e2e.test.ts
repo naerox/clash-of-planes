@@ -1,7 +1,7 @@
 // The browser-side `Connection` (client/src/net/connection.ts) against the REAL server,
 // using Node 22's built-in WebSocket. This is where reconnect-and-rejoin is proven end to end.
 
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { once } from "../../client/src/async.ts";
 import type { Bus } from "../../client/src/events.ts";

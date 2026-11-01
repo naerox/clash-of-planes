@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import type { Controls } from "../../src/input.ts";
 import { entityId, seq } from "../../src/brand.ts";
@@ -87,6 +87,7 @@ test("fire() announces itself as an event and tags the bullet with the input seq
 test("ship.fire called as a bare function throws — the `this` bug, reproduced", () => {
   const w = new World();
   const ship = w.spawn(new Ship(new Vector2(100, 100)));
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- THE BUG being reproduced
   const bareFire = ship.fire; // just the function reference, like passing it to addEventListener
   assert.throws(
     () => bareFire(w),

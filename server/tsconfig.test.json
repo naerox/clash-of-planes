@@ -5,5 +5,5 @@
   "compilerOptions": {
     "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
-  "include": ["src", "test", "scripts"]
+  "include": ["src", "test", "scripts", "vitest.config.ts"]
 }

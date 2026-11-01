@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { entityId } from "@dogfight/shared";
 import { Bus, emitSimEvent, type GameEvents } from "./events.ts";

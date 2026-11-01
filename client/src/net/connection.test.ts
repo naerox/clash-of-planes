@@ -1,4 +1,4 @@
-import test, { mock } from "node:test";
+import { test, vi } from "vitest";
 import assert from "node:assert/strict";
 import { entityId } from "@dogfight/shared";
 import { joinedMsg } from "../testing.ts";
@@ -71,7 +71,7 @@ class FakeWebSocket implements SocketLike {
 
 function setup(options: Partial<ConnectionOptions> = {}) {
   FakeWebSocket.all = [];
-  mock.timers.enable({ apis: ["setTimeout"] });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const conn = new Connection({
     url: "ws://x/ws",
     WebSocketImpl: FakeWebSocket,
@@ -92,7 +92,9 @@ function setup(options: Partial<ConnectionOptions> = {}) {
   };
   return { conn, states, closed, sockets, socket };
 }
-const teardown = () => mock.timers.reset();
+const teardown = (): void => {
+  vi.useRealTimers();
+};
 
 test("reconnectDelay doubles per attempt, is capped, and is jittered within [step/2, step]", () => {
   const top = (n: number): number =>
@@ -153,14 +155,14 @@ test("a dropped connection reconnects with growing pauses, re-sends the join, fl
     assert.equal(states.at(-1)?.delayMs, 100);
 
     conn.send(msg.chat("while offline"));
-    mock.timers.tick(99);
+    vi.advanceTimersByTime(99);
     assert.equal(sockets.length, 1, "not yet");
-    mock.timers.tick(1);
+    vi.advanceTimersByTime(1);
     assert.equal(sockets.length, 2);
 
     socket(1).drop(1006); // never opened: the next pause is longer
     assert.equal(states.at(-1)?.delayMs, 200);
-    mock.timers.tick(200);
+    vi.advanceTimersByTime(200);
     assert.equal(sockets.length, 3);
     socket(2).open();
     assert.deepEqual(
@@ -179,7 +181,7 @@ test("the pause is capped, and a message from the server resets the attempt coun
     conn.connect();
     for (let i = 0; i < 6; i++) {
       socket(-1).drop(1006);
-      mock.timers.tick(10_000);
+      vi.advanceTimersByTime(900); // longer than the largest pause (800), shorter than the 8 s connect timeout;
     }
     const delays = states.filter((s) => s.delayMs).map((s) => s.delayMs);
     assert.deepEqual(delays, [100, 200, 400, 800, 800, 800]);
@@ -202,7 +204,7 @@ test("fatal close codes end the connection: no reconnect", () => {
       socket(0).drop(code);
       assert.equal(conn.state, "closed");
       assert.deepEqual(closed, [{ code, reason: "", fatal: true }]);
-      mock.timers.tick(60_000);
+      vi.advanceTimersByTime(60_000);
       assert.equal(sockets.length, 1, `no new socket after ${code}`);
       assert.equal(conn.send(msg.chat("x")), false, "sending on a closed connection is refused");
     } finally {
@@ -219,7 +221,7 @@ test("server going away (1001) and 'try later' (1013) are retried", () => {
       socket(0).open();
       socket(0).drop(code);
       assert.equal(conn.state, "reconnecting");
-      mock.timers.tick(1000);
+      vi.advanceTimersByTime(1000);
       assert.equal(sockets.length, 2);
     } finally {
       teardown();
@@ -235,7 +237,7 @@ test("close() is final: cancels a pending reconnect and discards the queue", () 
     socket(0).drop(1006);
     conn.send(msg.chat("never sent"));
     conn.close();
-    mock.timers.tick(60_000);
+    vi.advanceTimersByTime(60_000);
     assert.equal(sockets.length, 1);
     assert.equal(conn.state, "closed");
     assert.equal(conn.queued, 0);
@@ -253,7 +255,7 @@ test("close() on an open socket closes it and does not reconnect", () => {
     conn.close(1000, "bye");
     assert.equal(conn.state, "closed");
     assert.equal(closed[0]?.code, 1000);
-    mock.timers.tick(60_000);
+    vi.advanceTimersByTime(60_000);
     assert.equal(sockets.length, 1);
   } finally {
     teardown();
@@ -304,7 +306,7 @@ test("events of a superseded socket are ignored", () => {
     conn.connect();
     socket(0).open();
     socket(0).drop(1006);
-    mock.timers.tick(1000);
+    vi.advanceTimersByTime(1000);
     const states: string[] = [];
     conn.on("status", (e) => states.push(e.state));
     socket(0).drop(1006); // a late duplicate from the dead socket
@@ -318,18 +320,18 @@ test("a connection attempt that never opens is abandoned after connectTimeoutMs,
   const { conn, sockets, socket, states } = setup({ connectTimeoutMs: 1000 });
   try {
     conn.connect();
-    mock.timers.tick(999);
+    vi.advanceTimersByTime(999);
     assert.equal(conn.state, "connecting");
-    mock.timers.tick(1);
+    vi.advanceTimersByTime(1);
     assert.equal(conn.state, "reconnecting");
     assert.equal(states.at(-1)?.delayMs, 100);
-    mock.timers.tick(100);
+    vi.advanceTimersByTime(100);
     assert.equal(sockets.length, 2, "a fresh socket after the pause");
     socket(0).open(); // the abandoned one waking up late must change nothing
     assert.equal(conn.state, "connecting");
     socket(1).open();
     assert.equal(conn.state, "open");
-    mock.timers.tick(60_000); // and an open socket is not timed out
+    vi.advanceTimersByTime(60_000); // and an open socket is not timed out
     assert.equal(conn.state, "open");
   } finally {
     teardown();
@@ -391,9 +393,9 @@ test("a binary frame counts as the server answering: it resets the reconnect bac
   try {
     conn.connect();
     socket(0).drop(1006);
-    mock.timers.tick(1000);
+    vi.advanceTimersByTime(1000);
     socket(1).drop(1006);
-    mock.timers.tick(1000);
+    vi.advanceTimersByTime(1000);
     socket(2).open();
     socket(2).receiveRaw(new ArrayBuffer(4));
     socket(2).drop(1006);

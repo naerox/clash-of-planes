@@ -91,6 +91,8 @@ export class Match {
   readonly world: World;
   readonly players = new Map<string, PlayerState>(); // player.id → state
 
+  /** Called at the start of every tick, before inputs are applied (the bots use it). */
+  readonly beforeStep = new Set<() => void>();
   running = false;
   #cancelTimer: (() => void) | null = null;
   nextAt = 0;
@@ -248,6 +250,7 @@ export class Match {
 
   /** Apply inputs → step the world → send a snapshot to everyone. Public so tests can drive it. */
   step(): void {
+    for (const hook of this.beforeStep) hook();
     for (const st of this.players.values()) {
       const backlog = st.queue.length;
       let take = backlog <= 1 ? backlog : Math.max(1, backlog - this.inputReserve);

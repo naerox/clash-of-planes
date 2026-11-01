@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { ARENA, STEP_MS } from "@dogfight/shared";
 import { bulletSnap, shipSnap as ship, snap } from "../testing.ts";

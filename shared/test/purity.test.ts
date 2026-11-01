@@ -2,7 +2,7 @@
 // just one of them — and nothing nondeterministic. This test reads the source and fails on
 // any of the forbidden names, so a careless `Math.random()` or `Date.now()` cannot slip in.
 
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

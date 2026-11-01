@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { circlesOverlap, findCollisions } from "../../src/sim/collision.ts";
 import { World } from "../../src/sim/world.ts";

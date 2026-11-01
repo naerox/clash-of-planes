@@ -11,6 +11,7 @@ import { TICK_RATE, hasControl, type ArenaConfig } from "@dogfight/shared";
 import { z } from "zod";
 import type { ServerConfig } from "./config.ts";
 import type { Logger } from "./logger.ts";
+import type { BotManager } from "./bots.ts";
 import { RoomError, type RoomManager } from "./rooms.ts";
 
 export type Headers = Record<string, string>;
@@ -81,6 +82,9 @@ function roomRequestSchema(maxPlayersPerRoom: number) {
   });
 }
 
+/** POST /api/rooms/:id/bots */
+const botRequestSchema = z.object({ count: z.number().int().min(1).max(32) });
+
 export interface RoomRequest {
   readonly name: string;
   readonly arena: ArenaConfig;
@@ -101,10 +105,11 @@ export function parseRoomRequest(
 export interface HttpDeps {
   config: ServerConfig;
   rooms: RoomManager;
+  bots: BotManager;
   log: Logger;
 }
 
-export function createRequestListener({ config, rooms, log }: HttpDeps): RequestListener {
+export function createRequestListener({ config, rooms, bots, log }: HttpDeps): RequestListener {
   async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     const { pathname } = url;
     const method = req.method;
@@ -135,6 +140,23 @@ export function createRequestListener({ config, rooms, log }: HttpDeps): Request
         }
       }
       throw new HttpError(405, "method not allowed", { Allow: "GET, POST" });
+    }
+
+    const botsRoute = /^\/api\/rooms\/([^/]+)\/bots$/.exec(pathname);
+    if (botsRoute) {
+      if (!config.bots) throw new HttpError(404, "bots are disabled on this server");
+      const room = rooms.get(botsRoute[1] ?? "");
+      if (!room) throw new HttpError(404, "no such room");
+      if (method === "POST") {
+        const parsed = botRequestSchema.safeParse(await readJsonBody(req, config.maxBodyBytes));
+        if (!parsed.success) throw new HttpError(400, "count must be an integer 1–32");
+        const added = bots.add(room, parsed.data.count);
+        return sendJson(res, 200, { added, bots: bots.botsIn(room), players: room.size });
+      }
+      if (method === "DELETE") {
+        return sendJson(res, 200, { removed: bots.remove(room), players: room.size });
+      }
+      throw new HttpError(405, "method not allowed", { Allow: "POST, DELETE" });
     }
 
     if (pathname === "/api/stats" && method === "GET") {
@@ -200,7 +222,7 @@ export function createRequestListener({ config, rooms, log }: HttpDeps): Request
     res.end(data);
   }
 
-  return async function onRequest(req, res) {
+  async function onRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     res.on("error", (err) => log.warn("response error", { error: err.message }));
     req.on("error", (err) => log.warn("request error", { error: err.message }));
     try {
@@ -233,5 +255,10 @@ export function createRequestListener({ config, rooms, log }: HttpDeps): Request
       const message = err instanceof Error ? err.message : "error";
       sendJson(res, status, { error: status === 500 ? "internal error" : message }, headers);
     }
+  }
+
+  // `onRequest` handles every error itself; the listener the http server wants returns nothing.
+  return (req, res) => {
+    void onRequest(req, res);
   };
 }

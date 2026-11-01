@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import {
   HttpError,
@@ -97,7 +97,10 @@ test("each attempt has its own timeout; a timed-out attempt is retried", async (
   const hang = (init: RequestInit): Promise<Response> =>
     new Promise((resolve, reject) => {
       const signal = init.signal;
-      if (++n === 1) signal?.addEventListener("abort", () => reject(signal.reason));
+      if (++n === 1)
+        signal?.addEventListener("abort", () =>
+          reject(signal.reason instanceof Error ? signal.reason : new Error("aborted")),
+        );
       else resolve(respond("[]"));
     });
   const { fetchImpl, calls } = scripted(hang);

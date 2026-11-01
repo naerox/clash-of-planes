@@ -51,13 +51,18 @@ export function devFaults(): Plugin {
     next();
   }
 
+  /** Connect wants a function that returns nothing; an error inside our async handler goes to `next`. */
+  const guarded: Connect.NextHandleFunction = (req, res, next) => {
+    handler(req, res, next).catch(next);
+  };
+
   return {
     name: "dev-faults",
     configureServer(server) {
-      server.middlewares.use(handler);
+      server.middlewares.use(guarded);
     },
     configurePreviewServer(server) {
-      server.middlewares.use(handler);
+      server.middlewares.use(guarded);
     },
   };
 }

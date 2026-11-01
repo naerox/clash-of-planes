@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -26,7 +26,7 @@ test("NdjsonEncoder: one object in → one JSON line out (object mode on the wri
     Readable.from([{ a: 1 }, { b: "ї" }], { objectMode: true }),
     new NdjsonEncoder(),
     new Writable({
-      write(c, _e, cb) {
+      write(c: Buffer, _e, cb) {
         chunks.push(c.toString());
         cb();
       },
@@ -195,7 +195,7 @@ test("end to end: a room's whole life lands in its NDJSON log, and /api/replays 
     assert.equal(typeof id, "string");
     assert.match(String(id), /^belt-[0-9a-f]{4}-\d{13}$/);
 
-    const res = await fetch(`${s.base}/api/replays/${id}`);
+    const res = await fetch(`${s.base}/api/replays/${String(id)}`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get("content-type") ?? "", /x-ndjson/);
     assert.equal(Number(res.headers.get("content-length")), size);

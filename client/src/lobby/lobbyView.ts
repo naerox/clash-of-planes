@@ -156,29 +156,38 @@ export function mountLobbyView(
     { signal },
   );
 
-  refreshBtn.addEventListener("click", () => lobby.refresh(), { signal });
-
-  createBtn.addEventListener(
+  refreshBtn.addEventListener(
     "click",
-    async () => {
-      createError.textContent = "";
-      const preset = presets[Number(presetSelect.value)];
-      if (!preset) return;
-      const name = roomName.value.trim() || preset.name;
-      createBtn.disabled = true;
-      try {
-        const room = await lobby.createRoom({ name, arena: preset.arena });
-        selected = room.id; // the next render (createRoom emitted "rooms") ticks its radio
-        renderRooms(lobby.rooms);
-        roomName.value = "";
-      } catch (err: unknown) {
-        createError.textContent = errorMessage(err);
-      } finally {
-        createBtn.disabled = false;
-      }
+    () => {
+      void lobby.refresh();
     },
     { signal },
   );
+
+  createBtn.addEventListener(
+    "click",
+    () => {
+      void createRoom();
+    },
+    { signal },
+  );
+  async function createRoom(): Promise<void> {
+    createError.textContent = "";
+    const preset = presets[Number(presetSelect.value)];
+    if (!preset) return;
+    const name = roomName.value.trim() || preset.name;
+    createBtn.disabled = true;
+    try {
+      const room = await lobby.createRoom({ name, arena: preset.arena });
+      selected = room.id; // the next render (createRoom emitted "rooms") ticks its radio
+      renderRooms(lobby.rooms);
+      roomName.value = "";
+    } catch (err: unknown) {
+      createError.textContent = errorMessage(err);
+    } finally {
+      createBtn.disabled = false;
+    }
+  }
 
   form.addEventListener(
     "submit",

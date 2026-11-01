@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-floating-promises, @typescript-eslint/await-thenable --
+   these puzzles ARE about promises nobody awaits and awaits of plain values: that is the exercise */
 // Five microtask/task ordering puzzles (README, Lab 3). Open `/?puzzles` — each one runs
 // in the real browser and prints its actual output next to the expected one. `log` stands
 // in for console.log so the output can be collected.

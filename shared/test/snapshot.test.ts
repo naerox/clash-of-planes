@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { World, Ship, Vector2, buildSnapshot, binaryCodec, seq } from "../src/index.ts";
 

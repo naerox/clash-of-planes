@@ -87,7 +87,7 @@ async function loadGame(screen: LoadingScreen): Promise<LoadResult & { bootId: s
     const result = await loadAll(applyFaults(manifest, faults, { firstBoot, bootId }), {
       signal: ac.signal,
       baseUrl: ASSET_BASE,
-      onProgress: screen.update,
+      onProgress: (progress) => screen.update(progress),
       ...NET,
     });
     console.info(`[assets] loadAll: ${(performance.now() - t0).toFixed(0)} ms`, result.failures);
@@ -388,19 +388,22 @@ async function main(): Promise<void> {
   startGame({ ...session, audio });
 }
 
+/** The last line of defence: an error nobody handled is shown, not swallowed. */
+const showFatal = (err: unknown): void => {
+  console.error(err);
+  overlay.hidden = false;
+  overlay.textContent = `Неочікувана помилка: ${errorMessage(err)}`;
+};
+
 const params = query;
 if (params.has("puzzles")) {
-  import("./lab3/puzzles.ts").then((m) => m.showPuzzles(overlay));
+  import("./lab3/puzzles.ts").then((m) => m.showPuzzles(overlay)).catch(showFatal);
 } else if (params.has("determinism")) {
-  import("./lab5/determinism.ts").then((m) => m.showDeterminism(overlay));
+  import("./lab5/determinism.ts").then((m) => m.showDeterminism(overlay)).catch(showFatal);
 } else if (params.has("bench")) {
   const latency = params.has("latency") ? faults.latency : 150;
-  import("./lab3/bench.ts").then((m) => m.showBench(overlay, { latency }));
+  import("./lab3/bench.ts").then((m) => m.showBench(overlay, { latency })).catch(showFatal);
 } else {
-  main().catch((err: unknown) => {
-    // Every expected failure is handled above; this is the last line for real bugs.
-    console.error(err);
-    overlay.hidden = false;
-    overlay.textContent = `Неочікувана помилка: ${errorMessage(err)}`;
-  });
+  // Every expected failure is handled inside; this is the last line for real bugs.
+  main().catch(showFatal);
 }

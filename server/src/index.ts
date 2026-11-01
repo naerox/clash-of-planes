@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { pathToFileURL } from "node:url";
 import { ConfigError, loadConfig, type ServerConfig } from "./config.ts";
+import { BotManager } from "./bots.ts";
 import { createRequestListener } from "./http.ts";
 import { createLogger, type Logger } from "./logger.ts";
 import { MatchLogs } from "./log/matchlog.ts";
@@ -41,7 +42,8 @@ export function createApp(config: ServerConfig, log: Logger = createLogger()) {
     void logs.detach(room); // its errors go to `onError`; nothing waits on this one
   });
 
-  const server = createServer(createRequestListener({ config, rooms, log }));
+  const bots = new BotManager();
+  const server = createServer(createRequestListener({ config, rooms, bots, log }));
   server.on("clientError", (err, socket) => {
     // a malformed request: answer 400 and close, never throw
     if (socket.writable) socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
@@ -54,6 +56,7 @@ export function createApp(config: ServerConfig, log: Logger = createLogger()) {
     config,
     server,
     rooms,
+    bots,
     logs,
     ws,
     listen(): Promise<AddressInfo> {
@@ -110,22 +113,26 @@ async function main(): Promise<void> {
 
   let shuttingDown = false;
   for (const signal of ["SIGINT", "SIGTERM"]) {
-    process.on(signal, async (): Promise<void> => {
-      if (shuttingDown) {
-        log.warn("second signal, exiting now", { signal });
-        process.exit(1);
-      }
-      shuttingDown = true;
-      log.info("shutting down", { signal });
-      try {
-        await app.shutdown();
-        log.info("bye");
-        process.exit(0);
-      } catch (err: unknown) {
-        log.error("shutdown failed", { error: err instanceof Error ? err.stack : String(err) });
-        process.exit(1);
-      }
+    process.on(signal, () => {
+      void shutdownOn(signal);
     });
+  }
+
+  async function shutdownOn(signal: string): Promise<void> {
+    if (shuttingDown) {
+      log.warn("second signal, exiting now", { signal });
+      process.exit(1);
+    }
+    shuttingDown = true;
+    log.info("shutting down", { signal });
+    try {
+      await app.shutdown();
+      log.info("bye");
+      process.exit(0);
+    } catch (err: unknown) {
+      log.error("shutdown failed", { error: err instanceof Error ? err.stack : String(err) });
+      process.exit(1);
+    }
   }
 }
 

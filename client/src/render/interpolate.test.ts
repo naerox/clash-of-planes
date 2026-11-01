@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { interpolatedPose, lerpAngle, lerpVec, lerpWrapped } from "./interpolate.ts";
 import { ARENA, Bullet, Pickup, Ship, Vector2 } from "@dogfight/shared";

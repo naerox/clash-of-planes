@@ -17,8 +17,11 @@
     "dev:client": "npm run dev -w client",
     "build": "npm run build -w client",
     "start": "npm run start -w server",
-    "test": "npm test --workspaces",
-    "typecheck": "npm run typecheck --workspaces",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "npm run coverage -w shared",
+    "typecheck": "npm run typecheck --workspaces && tsc --noEmit -p tsconfig.tools.json",
+    "e2e": "playwright test",
     "check:casts": "node tools/count-casts.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -26,12 +29,17 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.56.1",
     "@types/node": "^22.20.5",
+    "@vitest/coverage-v8": "^5.0.5",
     "concurrently": "^9.0.0",
     "eslint": "^10.11.0",
+    "fast-check": "^4.10.2",
     "globals": "^17.13.0",
     "prettier": "^3.9.9",
+    "speedscope": "^1.25.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.72.1"
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.0.5"
   }
 }

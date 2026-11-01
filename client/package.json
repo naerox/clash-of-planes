@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --test \"src/**/*.test.ts\"",
+    "test": "vitest run",
     "assets": "node scripts/gen-assets.ts"
   },
   "devDependencies": {

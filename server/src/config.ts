@@ -81,6 +81,8 @@ function envSchema(cwd: string, env: Env) {
       ENABLE_DEBUG_ROUTES: bool.default(false),
       // Artificial latency/jitter/loss for developing netcode (Lab 5). On unless NODE_ENV=production.
       ENABLE_NETSIM: bool.default(env.NODE_ENV !== "production"),
+      // POST /api/rooms/:id/bots: AI players, for demos, profiling and load tests (Lab 7). Same default.
+      ENABLE_BOTS: bool.default(env.NODE_ENV !== "production"),
     })
     .transform((e) => ({
       port: e.PORT,
@@ -103,6 +105,7 @@ function envSchema(cwd: string, env: Env) {
       inputReserve: e.INPUT_RESERVE,
       debugRoutes: e.ENABLE_DEBUG_ROUTES,
       netsim: e.ENABLE_NETSIM,
+      bots: e.ENABLE_BOTS,
     }));
 }
 

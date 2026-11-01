@@ -105,7 +105,7 @@ export class Predictor {
     if (shot && spawn) {
       const bullet = new Bullet(shot.pos, shot.vel, this.ship, BULLET_PARAMS, input.seq);
       // a local (negative) id until the server's copy is seen
-      this.bullets.push({ bullet, id: -input.seq, confirmed: false });
+      this.bullets.push({ bullet, id: 0 - input.seq, confirmed: false });
     }
     return shot;
   }

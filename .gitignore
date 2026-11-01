@@ -2,3 +2,7 @@ node_modules
 dist
 logs
 .env
+.e2e-logs
+test-results
+playwright-report
+coverage
